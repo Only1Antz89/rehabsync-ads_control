@@ -1,14 +1,23 @@
-import { Card } from '@/components/ui';
+import { getSession, isAdmin } from '@/lib/auth';
+import { NewslettersManager } from './NewslettersManager';
 
-export default function Page() {
+export const dynamic = 'force-dynamic';
+
+export default async function NewslettersPage() {
+  const session = await getSession();
+
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Newsletters</h1>
-      <Card>
-        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Newsletter composer, SMTP2GO sends and per-issue analytics arrive in M3.
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          Newsletters
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+          Compose, test-send and ship issues to the consent-based list via SMTP2GO. Suppressed and
+          unsubscribed addresses are excluded at send time, every time.
         </p>
-      </Card>
+      </div>
+      <NewslettersManager isAdmin={session ? isAdmin(session) : false} />
     </div>
   );
 }

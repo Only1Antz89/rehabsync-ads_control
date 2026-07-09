@@ -1,28 +1,46 @@
 import { and, eq, inArray, lte, sql } from 'drizzle-orm';
 import { adsPostTargets, adsPosts, adsSocialAccounts, getDb } from '@/db';
+import { getSettings } from './settings';
+import { publishToLinkedIn } from './social/linkedin';
 import { publishToFacebook, publishToInstagram } from './social/meta';
+import { publishToTikTok } from './social/tiktok';
+import { publishToYouTube } from './social/youtube';
+import { appendUtm } from './utm';
 
 const MAX_ATTEMPTS = 3;
 
 type Target = typeof adsPostTargets.$inferSelect;
 type Post = typeof adsPosts.$inferSelect;
 
-async function publishTarget(post: Post, target: Target): Promise<void> {
+interface PublishInput {
+  body: string;
+  linkUrl: string | null;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  title: string | null;
+}
+
+async function publishTarget(post: Post, target: Target, input: PublishInput): Promise<void> {
   const db = getDb();
   const [account] = target.accountId
     ? await db.select().from(adsSocialAccounts).where(eq(adsSocialAccounts.id, target.accountId)).limit(1)
     : [];
   try {
     if (!account) throw new Error('Connected account not found — it may have been disconnected');
-    const input = { body: post.body, linkUrl: post.linkUrl, imageUrl: post.imageUrl };
     const result =
       target.platform === 'facebook'
         ? await publishToFacebook(account, input)
         : target.platform === 'instagram'
           ? await publishToInstagram(account, input)
-          : (() => {
-              throw new Error(`API publishing for ${target.platform} is not available yet`);
-            })();
+          : target.platform === 'linkedin'
+            ? await publishToLinkedIn(account, input)
+            : target.platform === 'tiktok'
+              ? await publishToTikTok(account, input)
+              : target.platform === 'youtube'
+                ? await publishToYouTube(account, input)
+                : (() => {
+                    throw new Error(`API publishing for ${target.platform} is not available yet`);
+                  })();
 
     await db
       .update(adsPostTargets)
@@ -94,10 +112,20 @@ async function processPost(post: Post): Promise<void> {
       ),
     );
 
+  // Tool-wide UTM defaults are applied to the outbound link once, at publish time.
+  const settings = await getSettings();
+  const input: PublishInput = {
+    body: post.body,
+    linkUrl: post.linkUrl ? appendUtm(post.linkUrl, settings) : post.linkUrl,
+    imageUrl: post.imageUrl,
+    videoUrl: post.videoUrl,
+    title: post.title,
+  };
+
   for (const target of targets) {
     if (target.status === 'failed' && target.attemptCount >= MAX_ATTEMPTS) continue;
     if (target.accountId === null) continue; // manual-export targets are completed by a human
-    await publishTarget(post, target);
+    await publishTarget(post, target, input);
   }
   await recomputePostStatus(post.id);
 }
@@ -109,7 +137,14 @@ export async function publishDuePosts(limit = 5): Promise<{ processed: string[] 
     const rows = await tx
       .select()
       .from(adsPosts)
-      .where(and(eq(adsPosts.status, 'scheduled'), lte(adsPosts.scheduledAt, new Date())))
+      .where(
+        and(
+          eq(adsPosts.status, 'scheduled'),
+          lte(adsPosts.scheduledAt, new Date()),
+          // Approval workflow: unapproved posts are never claimed (they wait, not fail).
+          eq(adsPosts.approvalStatus, 'approved'),
+        ),
+      )
       .orderBy(adsPosts.scheduledAt)
       .limit(limit)
       .for('update', { skipLocked: true });
@@ -134,9 +169,15 @@ export async function publishPostNow(postId: string): Promise<string> {
   const [post] = await db
     .update(adsPosts)
     .set({ status: 'publishing', scheduledAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(adsPosts.id, postId), sql`${adsPosts.status} in ('draft','scheduled','failed','partial')`))
+    .where(
+      and(
+        eq(adsPosts.id, postId),
+        sql`${adsPosts.status} in ('draft','scheduled','failed','partial')`,
+        eq(adsPosts.approvalStatus, 'approved'),
+      ),
+    )
     .returning();
-  if (!post) throw new Error('Post is not in a publishable state');
+  if (!post) throw new Error('Post is not in a publishable state (it may be awaiting approval)');
   await processPost(post);
   return recomputePostStatus(postId);
 }

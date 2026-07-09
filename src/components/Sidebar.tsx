@@ -14,6 +14,9 @@ import {
   Users,
   Settings,
   Plug,
+  CheckSquare,
+  SlidersHorizontal,
+  ScrollText,
   LogOut,
   Menu,
   X,
@@ -30,6 +33,9 @@ const ICONS = {
   subscribers: Users,
   connections: Plug,
   admin: Settings,
+  approvals: CheckSquare,
+  settings: SlidersHorizontal,
+  audit: ScrollText,
 } as const;
 
 interface NavItem {
@@ -68,7 +74,10 @@ function buildNav(isAdmin: boolean): NavGroup[] {
       groupName: 'Administration',
       items: [
         { label: 'Connections', href: '/admin/connections', icon: 'connections' },
-        { label: 'Users & Settings', href: '/admin/users', icon: 'admin' },
+        { label: 'Approvals', href: '/admin/approvals', icon: 'approvals' },
+        { label: 'Users', href: '/admin/users', icon: 'admin' },
+        { label: 'Settings', href: '/admin/settings', icon: 'settings' },
+        { label: 'Audit log', href: '/admin/audit', icon: 'audit' },
       ],
     });
   }

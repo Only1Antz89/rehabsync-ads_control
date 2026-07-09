@@ -1,9 +1,11 @@
 import {
+  boolean,
   date,
   index,
   integer,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -95,6 +97,9 @@ export const adsSocialAccounts = pgTable(
   (table) => [uniqueIndex('ads_social_accounts_platform_ext_idx').on(table.platform, table.externalId)],
 );
 
+export const APPROVAL_STATUSES = ['approved', 'pending', 'rejected'] as const;
+export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
+
 export const adsPosts = pgTable(
   'ads_posts',
   {
@@ -102,7 +107,13 @@ export const adsPosts = pgTable(
     body: text('body').notNull().default(''),
     linkUrl: text('link_url'),
     imageUrl: text('image_url'),
+    videoUrl: text('video_url'),
+    title: varchar('title', { length: 100 }),
     status: varchar('status', { length: 20 }).notNull().default('draft'),
+    approvalStatus: varchar('approval_status', { length: 20 }).notNull().default('approved'),
+    approvalNote: text('approval_note'),
+    approvedBy: varchar('approved_by', { length: 255 }),
+    approvedAt: timestamp('approved_at'),
     scheduledAt: timestamp('scheduled_at'),
     publishedAt: timestamp('published_at'),
     createdBy: varchar('created_by', { length: 255 }),
@@ -110,7 +121,10 @@ export const adsPosts = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
-  (table) => [index('ads_posts_status_sched_idx').on(table.status, table.scheduledAt)],
+  (table) => [
+    index('ads_posts_status_sched_idx').on(table.status, table.scheduledAt),
+    index('ads_posts_approval_idx').on(table.approvalStatus),
+  ],
 );
 
 export const adsPostTargets = pgTable(
@@ -172,6 +186,111 @@ export const adsAccountMetrics = pgTable(
   },
   (table) => [uniqueIndex('ads_account_metrics_account_date_idx').on(table.accountId, table.date)],
 );
+
+/** Single-row tool settings (id is always 1). */
+export const adsSettings = pgTable('ads_settings', {
+  id: smallint('id').primaryKey().default(1),
+  requireApproval: boolean('require_approval').notNull().default(false),
+  utmSource: varchar('utm_source', { length: 80 }).notNull().default(''),
+  utmMedium: varchar('utm_medium', { length: 80 }).notNull().default(''),
+  utmCampaign: varchar('utm_campaign', { length: 80 }).notNull().default(''),
+  timezone: varchar('timezone', { length: 60 }).notNull().default('Europe/London'),
+  updatedBy: varchar('updated_by', { length: 255 }),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ── Newsletters (M3) ───────────────────────────────────────────────────────────────────
+
+export const SUBSCRIBER_STATUSES = ['pending', 'active', 'unsubscribed', 'bounced'] as const;
+export type SubscriberStatus = (typeof SUBSCRIBER_STATUSES)[number];
+
+export const NEWSLETTER_STATUSES = ['draft', 'scheduled', 'sending', 'sent', 'cancelled'] as const;
+export type NewsletterStatus = (typeof NEWSLETTER_STATUSES)[number];
+
+/** Audience filter stored on a newsletter: missing/empty tags mean "all active subscribers". */
+export interface NewsletterSegment {
+  tags?: string[];
+}
+
+export const adsSubscribers = pgTable(
+  'ads_subscribers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: varchar('email', { length: 255 }).notNull(),
+    name: varchar('name', { length: 160 }),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    tags: jsonb('tags').$type<string[]>().default([]).notNull(),
+    consentSource: varchar('consent_source', { length: 120 }).notNull(),
+    consentAt: timestamp('consent_at'),
+    confirmSentAt: timestamp('confirm_sent_at'),
+    unsubscribedAt: timestamp('unsubscribed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [index('ads_subscribers_status_idx').on(table.status)],
+);
+
+export const adsNewsletters = pgTable(
+  'ads_newsletters',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 160 }).notNull(),
+    subject: varchar('subject', { length: 255 }).notNull(),
+    html: text('html').notNull().default(''),
+    segment: jsonb('segment').$type<NewsletterSegment>().default({}).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('draft'),
+    scheduledAt: timestamp('scheduled_at'),
+    sentAt: timestamp('sent_at'),
+    createdBy: varchar('created_by', { length: 255 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [index('ads_newsletters_status_idx').on(table.status, table.scheduledAt)],
+);
+
+export const adsNewsletterRecipients = pgTable(
+  'ads_newsletter_recipients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    newsletterId: uuid('newsletter_id')
+      .notNull()
+      .references(() => adsNewsletters.id, { onDelete: 'cascade' }),
+    subscriberId: uuid('subscriber_id').references(() => adsSubscribers.id, { onDelete: 'set null' }),
+    email: varchar('email', { length: 255 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    messageId: varchar('message_id', { length: 160 }),
+    error: text('error'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('ads_newsletter_recipients_unique_idx').on(table.newsletterId, table.email),
+    index('ads_newsletter_recipients_status_idx').on(table.newsletterId, table.status),
+    index('ads_newsletter_recipients_msg_idx').on(table.messageId),
+  ],
+);
+
+export const adsEmailEvents = pgTable(
+  'ads_email_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    newsletterId: uuid('newsletter_id').references(() => adsNewsletters.id, { onDelete: 'cascade' }),
+    recipientId: uuid('recipient_id').references(() => adsNewsletterRecipients.id, { onDelete: 'cascade' }),
+    email: varchar('email', { length: 255 }).notNull(),
+    event: varchar('event', { length: 20 }).notNull(),
+    url: text('url'),
+    raw: jsonb('raw').$type<Record<string, unknown>>().default({}).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [index('ads_email_events_newsletter_idx').on(table.newsletterId, table.event)],
+);
+
+export const adsSuppressions = pgTable('ads_suppressions', {
+  email: varchar('email', { length: 255 }).primaryKey(),
+  reason: varchar('reason', { length: 30 }).notNull().default('unsubscribed'),
+  source: varchar('source', { length: 60 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
 
 export const adsAuditLogs = pgTable(
   'ads_audit_logs',

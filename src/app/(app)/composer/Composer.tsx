@@ -21,10 +21,13 @@ export function Composer() {
   const [body, setBody] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
+  const [title, setTitle] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [manual, setManual] = useState<Set<SocialPlatform>>(new Set());
   const [scheduledAt, setScheduledAt] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,7 +37,16 @@ export function Composer() {
       .catch(() => setAccounts([]));
   }, []);
 
-  const draft = useMemo(() => ({ body, linkUrl: linkUrl || null, imageUrl: imageUrl || null }), [body, linkUrl, imageUrl]);
+  const draft = useMemo(
+    () => ({
+      body,
+      linkUrl: linkUrl || null,
+      imageUrl: imageUrl || null,
+      videoUrl: videoUrl || null,
+      title: title || null,
+    }),
+    [body, linkUrl, imageUrl, videoUrl, title],
+  );
 
   const problems = useMemo(() => {
     const platforms = new Set<SocialPlatform>([
@@ -54,6 +66,7 @@ export function Composer() {
   async function submit(mode: 'draft' | 'schedule' | 'now') {
     setBusy(mode);
     setError(null);
+    setNotice(null);
     try {
       const res = await fetch('/api/posts', {
         method: 'POST',
@@ -62,15 +75,22 @@ export function Composer() {
           body,
           linkUrl: linkUrl || null,
           imageUrl: imageUrl || null,
+          videoUrl: videoUrl || null,
+          title: title || null,
           accountIds: [...selected],
           manualPlatforms: [...manual],
           scheduledAt: mode === 'schedule' ? scheduledAt || null : null,
           publishNow: mode === 'now',
         }),
       });
+      const data = (await res.json().catch(() => null)) as { error?: string; notice?: string } | null;
       if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
         setError(data?.error ?? 'Save failed.');
+        return;
+      }
+      if (data?.notice) {
+        // Approval workflow queued it — stay here so the author sees why nothing published.
+        setNotice(data.notice);
         return;
       }
       router.push('/posts');
@@ -102,12 +122,25 @@ export function Composer() {
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
             placeholder="https://…/image.jpg"
-            hint="Public https image. In-app media upload arrives with the video milestone."
+            hint="Public https image."
           />
           {imageUrl.trim() && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imageUrl} alt="Preview" className="max-h-48 rounded-lg border" style={{ borderColor: 'var(--border-primary)' }} />
           )}
+          <Input
+            label="Video URL (required for TikTok / YouTube)"
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            placeholder="https://…/video.mp4"
+            hint="Public https video — TikTok pulls it from this URL; YouTube uploads it."
+          />
+          <Input
+            label="Title (required for YouTube)"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Clinic tour: the new studio"
+          />
         </div>
       </Card>
 
@@ -153,6 +186,7 @@ export function Composer() {
             </ul>
           )}
           {error && <p className="mb-3 text-sm" style={{ color: 'var(--color-error-text)' }}>{error}</p>}
+          {notice && <p className="mb-3 text-sm" style={{ color: 'var(--color-success-text)' }}>{notice}</p>}
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>

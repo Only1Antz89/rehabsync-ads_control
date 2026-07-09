@@ -26,10 +26,15 @@ const PLATFORM_MARKS: Record<string, { initials: string; bg: string }> = {
 const ERRORS: Record<string, string> = {
   forbidden: 'Only admins can connect accounts.',
   meta_not_configured: 'META_APP_ID / META_APP_SECRET are not set — add them to the environment first.',
+  linkedin_not_configured: 'LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET are not set — add them once the LinkedIn app is approved.',
+  tiktok_not_configured: 'TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET are not set — add them once the Content Posting API audit passes.',
+  youtube_not_configured: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set — add them once the Google OAuth app is verified.',
   state_mismatch: 'The sign-in flow expired or was tampered with — try again.',
-  denied: 'Meta authorisation was declined.',
+  denied: 'Authorisation was declined.',
   no_pages: 'No Facebook Pages found on that Meta account — the app needs a Page (and optionally a linked Instagram Business account).',
-  exchange_failed: 'Connecting failed while talking to Meta — check the app credentials and try again.',
+  no_orgs: 'No LinkedIn organisation pages found — the connecting member must be an administrator of a company page.',
+  no_channels: 'No YouTube channels found on that Google account.',
+  exchange_failed: 'Connecting failed while talking to the platform — check the app credentials and try again.',
 };
 
 export function ConnectionsManager() {
@@ -128,10 +133,50 @@ export function ConnectionsManager() {
         )}
       </Card>
 
-      <Card title="Coming next">
+      <Card
+        title="LinkedIn — Company pages"
+        description="Publishes to organisation pages via the Community Management API. Needs the approved LinkedIn app credentials in the environment."
+      >
+        <a
+          href="/api/oauth/linkedin/start"
+          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
+          style={{ backgroundColor: '#0a66c2' }}
+        >
+          <span className="text-sm font-bold">in</span> Connect LinkedIn
+        </a>
+      </Card>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Card
+          title="TikTok"
+          description="Video publishing via the Content Posting API (pull-from-URL). Needs the audited app credentials."
+        >
+          <a
+            href="/api/oauth/tiktok/start"
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
+            style={{ backgroundColor: '#010101' }}
+          >
+            <span className="text-sm font-bold">TT</span> Connect TikTok
+          </a>
+        </Card>
+        <Card
+          title="YouTube"
+          description="Video uploads via the Data API v3. Needs the verified Google OAuth app credentials."
+        >
+          <a
+            href="/api/oauth/youtube/start"
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
+            style={{ backgroundColor: '#ff0000' }}
+          >
+            <span className="text-sm font-bold">YT</span> Connect YouTube
+          </a>
+        </Card>
+      </div>
+
+      <Card title="Manual export">
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          LinkedIn (M3 — API access request pending), TikTok &amp; YouTube (M4 — video pipeline). Until then
-          they publish via the manual-export checklist, and X stays manual-export by choice.
+          Unconnected platforms always work via the manual-export checklist in the composer, and X
+          stays manual-export by choice.
         </p>
       </Card>
     </div>

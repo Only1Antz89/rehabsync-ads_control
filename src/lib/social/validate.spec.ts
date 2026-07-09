@@ -31,4 +31,21 @@ describe('per-platform validation', () => {
     expect(validateForPlatform(draft, 'instagram').some((p) => p.includes('not clickable'))).toBe(true);
     expect(blockingProblems(draft, 'instagram')).toEqual([]);
   });
+
+  it('requires a video for tiktok/youtube and a title for youtube', () => {
+    expect(validateForPlatform({ body: 'clip' }, 'tiktok').some((p) => p.includes('requires a video'))).toBe(true);
+    const missingTitle = validateForPlatform({ body: 'desc', videoUrl: 'https://cdn.example.com/v.mp4' }, 'youtube');
+    expect(missingTitle.some((p) => p.includes('requires a title'))).toBe(true);
+    expect(
+      validateForPlatform(
+        { body: 'desc', videoUrl: 'https://cdn.example.com/v.mp4', title: 'Clinic tour' },
+        'youtube',
+      ),
+    ).toEqual([]);
+    expect(
+      validateForPlatform({ body: 'x', videoUrl: 'http://insecure.example.com/v.mp4', title: 't' }, 'tiktok').some(
+        (p) => p.includes('https'),
+      ),
+    ).toBe(true);
+  });
 });

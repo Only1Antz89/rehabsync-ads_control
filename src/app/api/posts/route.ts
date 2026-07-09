@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { SOCIAL_PLATFORMS, adsPostTargets, adsPosts, adsSocialAccounts, getDb } from '@/db';
 import type { SocialPlatform } from '@/db';
+import { isAdmin } from '@/lib/auth';
 import { isResponse, requireSession } from '@/lib/route-auth';
+import { getSettings } from '@/lib/settings';
 import { blockingProblems, PLATFORM_RULES } from '@/lib/social/validate';
 import { publishPostNow } from '@/lib/publisher';
 import { recordAudit } from '@/lib/audit';
@@ -43,6 +45,8 @@ interface CreateBody {
   body?: string;
   linkUrl?: string | null;
   imageUrl?: string | null;
+  videoUrl?: string | null;
+  title?: string | null;
   accountIds?: string[];
   manualPlatforms?: string[];
   scheduledAt?: string | null;
@@ -83,7 +87,13 @@ export async function POST(req: Request) {
   }
 
   // Validate the draft against every selected platform; blocking problems reject the request.
-  const draft = { body, linkUrl: input.linkUrl, imageUrl: input.imageUrl };
+  const draft = {
+    body,
+    linkUrl: input.linkUrl,
+    imageUrl: input.imageUrl,
+    videoUrl: input.videoUrl,
+    title: input.title,
+  };
   const problems = [
     ...accounts.flatMap((a) => blockingProblems(draft, a.platform as SocialPlatform)),
     ...manualPlatforms.flatMap((p) => blockingProblems(draft, p)),
@@ -96,13 +106,20 @@ export async function POST(req: Request) {
   const wantsSchedule = Boolean(scheduledAt) && !input.publishNow;
   const status = input.publishNow ? 'scheduled' : wantsSchedule ? 'scheduled' : 'draft';
 
+  // Approval workflow: when the toggle is on, posts by the `user` role wait for an admin.
+  const settings = await getSettings();
+  const needsApproval = settings.requireApproval && !isAdmin(session);
+
   const [post] = await db
     .insert(adsPosts)
     .values({
       body,
       linkUrl: input.linkUrl?.trim() || null,
       imageUrl: input.imageUrl?.trim() || null,
+      videoUrl: input.videoUrl?.trim() || null,
+      title: input.title?.trim() || null,
       status,
+      approvalStatus: needsApproval ? 'pending' : 'approved',
       scheduledAt: input.publishNow ? new Date() : scheduledAt,
       createdBy: session.email,
     })
@@ -127,11 +144,19 @@ export async function POST(req: Request) {
 
   await recordAudit(session, 'post_created', 'ads_post', post!.id, {
     status,
+    approvalStatus: needsApproval ? 'pending' : 'approved',
     targets: accounts.length + manualPlatforms.length,
     apiPublishable: accounts.filter((a) => PLATFORM_RULES[a.platform as SocialPlatform].apiPublishing).length,
   });
 
   if (input.publishNow) {
+    if (needsApproval) {
+      // Queued instead of published — it goes out the moment an admin approves.
+      return NextResponse.json(
+        { post, notice: 'Sent for approval — it will publish once an admin approves it.' },
+        { status: 201 },
+      );
+    }
     const finalStatus = await publishPostNow(post!.id);
     return NextResponse.json({ post: { ...post, status: finalStatus } }, { status: 201 });
   }

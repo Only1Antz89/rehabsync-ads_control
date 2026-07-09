@@ -120,10 +120,12 @@ export default async function DashboardPage() {
             <TrendingUp size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--brand-primary)' }} />
             <div>
               <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                Engagement analytics <Badge variant="neutral">M2</Badge> · Newsletters <Badge variant="neutral">M3</Badge>
+                Engagement analytics <Badge variant="info">M2</Badge> · Newsletters <Badge variant="info">M3</Badge>
               </p>
               <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                Impressions, reach and follower growth per platform; consent-based newsletters via SMTP2GO.
+                Impressions, reach and follower growth per platform; consent-based newsletters via
+                SMTP2GO with double opt-in — see Subscribers and Newsletters. TikTok/YouTube video
+                publishing lands in M4.
               </p>
             </div>
           </li>

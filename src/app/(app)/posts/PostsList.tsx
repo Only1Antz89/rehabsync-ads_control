@@ -24,6 +24,7 @@ interface Post {
   linkUrl: string | null;
   imageUrl: string | null;
   status: string;
+  approvalStatus: string;
   scheduledAt: string | null;
   publishedAt: string | null;
   createdBy: string | null;
@@ -133,6 +134,8 @@ export function PostsList() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <Badge variant={postVariant(post.status)}>{post.status}</Badge>
+                {post.approvalStatus === 'pending' && <Badge variant="warning">awaiting approval</Badge>}
+                {post.approvalStatus === 'rejected' && <Badge variant="error">rejected</Badge>}
                 {post.scheduledAt && post.status === 'scheduled' && (
                   <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                     due {new Date(post.scheduledAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
