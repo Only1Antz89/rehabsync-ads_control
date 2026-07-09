@@ -1,0 +1,98 @@
+@import 'tailwindcss';
+
+/* ─── Semantic design tokens ────────────────────────────────────────────────── */
+/* Copied from the main RehabSync repo (apps/web/src/app/globals.css) so the    */
+/* internal tools stay visually identical to the platform. Do not diverge —     */
+/* sync changes from the platform, never the other way around.                  */
+
+:root {
+  /* Surfaces */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+
+  /* Borders */
+  --border-primary: #e2e8f0;
+  --border-secondary: #f1f5f9;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-inverse: #ffffff;
+
+  /* Status (shared across themes) */
+  --color-success: #16a34a;
+  --color-success-bg: #f0fdf4;
+  --color-success-text: #166534;
+  --color-warning: #d97706;
+  --color-warning-bg: #fffbeb;
+  --color-warning-text: #92400e;
+  --color-error: #dc2626;
+  --color-error-bg: #fef2f2;
+  --color-error-text: #991b1b;
+  --color-info: #2563eb;
+  --color-info-bg: #eff6ff;
+  --color-info-text: #1e40af;
+
+  /* Brand */
+  --brand-primary: #0d9488;
+  --brand-secondary: #102a43;
+  --brand-accent: #14b8a6;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* ─── Dark mode ─────────────────────────────────────────────────────────────── */
+[data-theme='dark'] {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: #1e293b;
+  --bg-input: #1e293b;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+
+  --border-primary: #334155;
+  --border-secondary: #1e293b;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-inverse: #0f172a;
+
+  --color-success-bg: rgba(22, 163, 74, 0.15);
+  --color-success-text: #4ade80;
+  --color-warning-bg: rgba(217, 119, 6, 0.15);
+  --color-warning-text: #fbbf24;
+  --color-error-bg: rgba(220, 38, 38, 0.15);
+  --color-error-text: #f87171;
+  --color-info-bg: rgba(37, 99, 235, 0.15);
+  --color-info-text: #60a5fa;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+
+/* ─── Base styles ───────────────────────────────────────────────────────────── */
+body {
+  font-family:
+    var(--font-inter, 'Inter'),
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
