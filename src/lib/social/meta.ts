@@ -203,3 +203,117 @@ export async function publishToInstagram(
   });
   return { platformPostId: published.id, platformUrl: null };
 }
+
+// ── Engagement metrics (M2) ───────────────────────────────────────────────────
+
+export interface PostMetricsSnapshot {
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  clicks: number;
+  videoViews: number;
+  raw: Record<string, unknown>;
+}
+
+interface InsightsPayload {
+  data?: Array<{ name?: string; values?: Array<{ value?: unknown }> }>;
+}
+
+function insightValue(payload: InsightsPayload, name: string): number {
+  const metric = payload.data?.find((m) => m.name === name);
+  const value = metric?.values?.[0]?.value;
+  return typeof value === 'number' ? value : 0;
+}
+
+async function graphGetSafe<T>(path: string, params: Record<string, string>): Promise<T | null> {
+  try {
+    return await graphGet<T>(path, params);
+  } catch {
+    return null;
+  }
+}
+
+/** Facebook Page post metrics: insights + engagement summaries. Tolerant of missing metrics. */
+export async function fetchFacebookPostMetrics(
+  account: { accessTokenEnc: string | null },
+  platformPostId: string,
+): Promise<PostMetricsSnapshot | null> {
+  if (!account.accessTokenEnc) return null;
+  const token = decryptToken(account.accessTokenEnc);
+
+  const insights = await graphGetSafe<InsightsPayload>(`${platformPostId}/insights`, {
+    metric: 'post_impressions,post_impressions_unique,post_clicks',
+    access_token: token,
+  });
+  const summary = await graphGetSafe<{
+    likes?: { summary?: { total_count?: number } };
+    comments?: { summary?: { total_count?: number } };
+    shares?: { count?: number };
+  }>(platformPostId, {
+    fields: 'likes.summary(true).limit(0),comments.summary(true).limit(0),shares',
+    access_token: token,
+  });
+  if (!insights && !summary) return null;
+
+  return {
+    impressions: insights ? insightValue(insights, 'post_impressions') : 0,
+    reach: insights ? insightValue(insights, 'post_impressions_unique') : 0,
+    clicks: insights ? insightValue(insights, 'post_clicks') : 0,
+    likes: summary?.likes?.summary?.total_count ?? 0,
+    comments: summary?.comments?.summary?.total_count ?? 0,
+    shares: summary?.shares?.count ?? 0,
+    videoViews: 0,
+    raw: { insights: insights ?? {}, summary: summary ?? {} },
+  };
+}
+
+/** Instagram media metrics via the media insights edge. */
+export async function fetchInstagramPostMetrics(
+  account: { accessTokenEnc: string | null },
+  platformPostId: string,
+): Promise<PostMetricsSnapshot | null> {
+  if (!account.accessTokenEnc) return null;
+  const token = decryptToken(account.accessTokenEnc);
+  const insights = await graphGetSafe<InsightsPayload>(`${platformPostId}/insights`, {
+    metric: 'impressions,reach,likes,comments,shares,saved',
+    access_token: token,
+  });
+  if (!insights) return null;
+  return {
+    impressions: insightValue(insights, 'impressions'),
+    reach: insightValue(insights, 'reach'),
+    likes: insightValue(insights, 'likes'),
+    comments: insightValue(insights, 'comments'),
+    shares: insightValue(insights, 'shares'),
+    clicks: 0,
+    videoViews: 0,
+    raw: { insights, saved: insightValue(insights, 'saved') },
+  };
+}
+
+/** Daily account snapshot: follower count (FB fan_count / IG followers_count). */
+export async function fetchAccountFollowers(account: {
+  platform: string;
+  externalId: string;
+  accessTokenEnc: string | null;
+}): Promise<{ followers: number; raw: Record<string, unknown> } | null> {
+  if (!account.accessTokenEnc) return null;
+  const token = decryptToken(account.accessTokenEnc);
+  if (account.platform === 'facebook') {
+    const data = await graphGetSafe<{ fan_count?: number }>(account.externalId, {
+      fields: 'fan_count',
+      access_token: token,
+    });
+    return data ? { followers: data.fan_count ?? 0, raw: data as Record<string, unknown> } : null;
+  }
+  if (account.platform === 'instagram') {
+    const data = await graphGetSafe<{ followers_count?: number }>(account.externalId, {
+      fields: 'followers_count',
+      access_token: token,
+    });
+    return data ? { followers: data.followers_count ?? 0, raw: data as Record<string, unknown> } : null;
+  }
+  return null;
+}

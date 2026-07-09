@@ -1,11 +1,41 @@
 import { CalendarDays, PenSquare, Plug, TrendingUp } from 'lucide-react';
+import { and, eq, gte, sql } from 'drizzle-orm';
+import { adsPosts, adsSocialAccounts, getDb } from '@/db';
 import { getSession } from '@/lib/auth';
 import { Badge, Card } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
+async function loadCounts(): Promise<{ accounts: number; scheduled: number; publishedThisMonth: number }> {
+  try {
+    const db = getDb();
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const [accounts, posts] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(adsSocialAccounts)
+        .where(eq(adsSocialAccounts.status, 'connected')),
+      db
+        .select({
+          scheduled: sql<number>`count(*) filter (where ${adsPosts.status} = 'scheduled')::int`,
+          publishedThisMonth: sql<number>`count(*) filter (where ${and(eq(adsPosts.status, 'published'), gte(adsPosts.publishedAt, monthStart))})::int`,
+        })
+        .from(adsPosts),
+    ]);
+    return {
+      accounts: accounts[0]?.count ?? 0,
+      scheduled: posts[0]?.scheduled ?? 0,
+      publishedThisMonth: posts[0]?.publishedThisMonth ?? 0,
+    };
+  } catch {
+    return { accounts: 0, scheduled: 0, publishedThisMonth: 0 };
+  }
+}
+
 export default async function DashboardPage() {
-  const session = await getSession();
+  const [session, counts] = await Promise.all([getSession(), loadCounts()]);
   const firstName = (session?.name ?? '').split(' ')[0] || 'there';
   const isAdmin = session?.role === 'admin' || session?.role === 'super_admin';
 
@@ -16,7 +46,7 @@ export default async function DashboardPage() {
           Welcome back, {firstName}
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-          Your social publishing hub. Foundations are live — publishing lands in M1.
+          Your social publishing hub.
         </p>
       </div>
 
@@ -26,7 +56,7 @@ export default async function DashboardPage() {
             Connected accounts
           </p>
           <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>
-            0
+            {counts.accounts}
           </p>
         </Card>
         <Card>
@@ -34,7 +64,7 @@ export default async function DashboardPage() {
             Scheduled posts
           </p>
           <p className="text-3xl font-bold mt-1" style={{ color: 'var(--brand-primary)' }}>
-            0
+            {counts.scheduled}
           </p>
         </Card>
         <Card>
@@ -42,7 +72,7 @@ export default async function DashboardPage() {
             Published this month
           </p>
           <p className="text-3xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>
-            0
+            {counts.publishedThisMonth}
           </p>
         </Card>
       </div>
