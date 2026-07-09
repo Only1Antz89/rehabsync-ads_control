@@ -1,14 +1,17 @@
-import { Card } from '@/components/ui';
+import { Composer } from './Composer';
 
-export default function Page() {
+export default function ComposerPage() {
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Composer</h1>
-      <Card>
-        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Compose once, publish to Facebook, Instagram, LinkedIn and more — arrives in M1 with Meta connected first and manual-export mode for every other platform.
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          Composer
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+          Compose once, publish to every selected platform — validation runs per platform as you type.
         </p>
-      </Card>
+      </div>
+      <Composer />
     </div>
   );
 }

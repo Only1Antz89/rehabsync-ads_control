@@ -1,14 +1,17 @@
-import { Card } from '@/components/ui';
+import { PostsList } from './PostsList';
 
-export default function Page() {
+export default function PostsPage() {
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Posts</h1>
-      <Card>
-        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Post list with per-platform publish status and errors arrives in M1.
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          Posts
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+          Every post with its per-platform status — publish, retry, and work the manual-export checklist.
         </p>
-      </Card>
+      </div>
+      <PostsList />
     </div>
   );
 }

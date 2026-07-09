@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/health', '/api/auth/login', '/api/health'];
+const PUBLIC_PATHS = ['/login', '/health', '/api/auth/login', '/api/health', '/api/cron'];
 
 /**
  * Cheap gate: redirect to /login when no session cookie of either kind is present. This only
