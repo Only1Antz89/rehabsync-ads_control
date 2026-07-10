@@ -1,10 +1,32 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Card, Input } from '@/components/ui';
 import { PLATFORM_RULES, validateForPlatform } from '@/lib/social/validate';
 import type { SocialPlatform } from '@/db/schema';
+
+/** Sign with our API, then PUT the file straight to Supabase Storage; returns the public URL. */
+async function uploadMedia(file: File): Promise<string> {
+  const signRes = await fetch('/api/media/sign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
+  });
+  const signed = (await signRes.json().catch(() => null)) as
+    | { uploadUrl?: string; publicUrl?: string; error?: string }
+    | null;
+  if (!signRes.ok || !signed?.uploadUrl || !signed.publicUrl) {
+    throw new Error(signed?.error ?? 'Could not prepare the upload.');
+  }
+  const put = await fetch(signed.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'false' },
+    body: file,
+  });
+  if (!put.ok) throw new Error(`Upload failed (HTTP ${put.status}).`);
+  return signed.publicUrl;
+}
 
 interface Account {
   id: string;
@@ -29,6 +51,26 @@ export function Composer() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<'image' | 'video' | null>(null);
+  const imageFileRef = useRef<HTMLInputElement>(null);
+  const videoFileRef = useRef<HTMLInputElement>(null);
+
+  async function onPickFile(kind: 'image' | 'video', e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    setUploading(kind);
+    setError(null);
+    try {
+      const url = await uploadMedia(file);
+      if (kind === 'image') setImageUrl(url);
+      else setVideoUrl(url);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setUploading(null);
+    }
+  }
 
   useEffect(() => {
     fetch('/api/accounts')
@@ -117,24 +159,40 @@ export function Composer() {
           />
           <p className="text-xs text-right" style={{ color: 'var(--text-muted)' }}>{body.length} characters</p>
           <Input label="Link (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://rehabsync.app/…" />
-          <Input
-            label="Image URL (optional — required for Instagram)"
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://…/image.jpg"
-            hint="Public https image."
-          />
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Input
+                label="Image URL (optional — required for Instagram)"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://…/image.jpg"
+                hint="Public https image — paste a URL or upload."
+              />
+            </div>
+            <input ref={imageFileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => void onPickFile('image', e)} />
+            <Button type="button" variant="secondary" loading={uploading === 'image'} onClick={() => imageFileRef.current?.click()}>
+              Upload
+            </Button>
+          </div>
           {imageUrl.trim() && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imageUrl} alt="Preview" className="max-h-48 rounded-lg border" style={{ borderColor: 'var(--border-primary)' }} />
           )}
-          <Input
-            label="Video URL (required for TikTok / YouTube)"
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-            placeholder="https://…/video.mp4"
-            hint="Public https video — TikTok pulls it from this URL; YouTube uploads it."
-          />
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Input
+                label="Video URL (required for TikTok / YouTube)"
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                placeholder="https://…/video.mp4"
+                hint="Public https video — TikTok pulls it from this URL; YouTube uploads it."
+              />
+            </div>
+            <input ref={videoFileRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden" onChange={(e) => void onPickFile('video', e)} />
+            <Button type="button" variant="secondary" loading={uploading === 'video'} onClick={() => videoFileRef.current?.click()}>
+              Upload
+            </Button>
+          </div>
           <Input
             label="Title (required for YouTube)"
             value={title}
