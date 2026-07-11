@@ -12,6 +12,23 @@ let db: Db | null = null;
 /** Lazily-initialised singleton (survives Next.js dev hot reloads via globalThis). */
 const globalStore = globalThis as unknown as { __adsDb?: Db; __adsSql?: postgres.Sql };
 
+/**
+ * TLS for the DB connection. Supabase (and any managed Postgres) requires it — connecting without
+ * SSL is refused, which surfaced as opaque 500s on every query in production while migrations (which
+ * DO set SSL, see scripts/deploy-migrate.ts) connected fine. Enabled for any non-local host so it
+ * works regardless of REHABSYNC_NODE_ENV; the chain isn't verified by default (set
+ * REHABSYNC_DATABASE_SSL_REJECT_UNAUTHORIZED=true to enforce), matching the migrate script.
+ */
+function sslOption(url: string): boolean | { rejectUnauthorized: boolean } {
+  try {
+    const host = new URL(url).hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
+  } catch {
+    // Unparseable URL — assume remote and require TLS.
+  }
+  return { rejectUnauthorized: process.env['REHABSYNC_DATABASE_SSL_REJECT_UNAUTHORIZED'] === 'true' };
+}
+
 export function getDb(): Db {
   if (globalStore.__adsDb) return globalStore.__adsDb;
   if (db) return db;
@@ -25,6 +42,7 @@ export function getDb(): Db {
     max: 5,
     prepare: false, // Supabase pooler (transaction mode) compatibility
     connect_timeout: 10,
+    ssl: sslOption(url),
   });
   db = drizzle(client, { schema });
 
