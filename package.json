@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src middleware.ts scripts",
+    "lint": "eslint src scripts",
     "test": "vitest run",
     "db:deploy": "tsx scripts/deploy-migrate.ts",
     "staff:create": "tsx scripts/create-staff-user.ts"
