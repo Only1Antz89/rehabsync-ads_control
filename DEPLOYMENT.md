@@ -15,8 +15,7 @@ Merge the integration changes (branch `claude/rehabsync-equipment-mvp-5eww8m`), 
 
 1. Import `Only1Antz89/rehabsync-ads_control`, framework Next.js, root `/`.
 2. Attach domain `adscentre.rehabsync.app`; DNS: CNAME `adscentre` → `cname.vercel-dns.com`.
-3. Crons come from `vercel.json` automatically:
-   `publish-due` (*/5), `sync-metrics` (hourly), `send-newsletters` (*/10) — all require `CRON_SECRET`.
+3. Scheduled jobs — see **Scheduled jobs** below (external triggers on Hobby).
 
 ## 3. Environment variables (see `.env.example`)
 
@@ -51,6 +50,34 @@ pnpm staff:create -- --email <email> --name "<name>" --password '<pw>' --role ad
 
 `staff_*` tables are shared with Sales Centre (identical DDL — whichever repo migrates first
 creates them). Platform super-admins never need a staff account.
+
+## Scheduled jobs (Vercel Hobby)
+
+Three jobs need to run on a schedule. **Vercel's Hobby plan runs cron jobs at most once per day
+and caps the count** — too infrequent (and too many) for these — so there is no `vercel.json` in
+this repo. Drive each `CRON_SECRET`-secured endpoint from an external scheduler
+([cron-job.org](https://cron-job.org), EasyCron, or a GitHub Actions `schedule` workflow) with an
+`Authorization: Bearer <CRON_SECRET>` header. All three are idempotent and safe to over-call.
+
+| Endpoint | Frequency |
+|---|---|
+| `GET /api/cron/publish-due` | every ~5 minutes (publishes scheduled posts) |
+| `GET /api/cron/sync-metrics` | hourly (pulls engagement + follower snapshots) |
+| `GET /api/cron/send-newsletters` | every ~10 minutes (sends due newsletter batches) |
+
+Base URL: `https://adscentre.rehabsync.app`.
+
+**On Vercel Pro** you can let Vercel run them instead — add `vercel.json`:
+
+```json
+{
+  "crons": [
+    { "path": "/api/cron/publish-due", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/sync-metrics", "schedule": "0 * * * *" },
+    { "path": "/api/cron/send-newsletters", "schedule": "*/10 * * * *" }
+  ]
+}
+```
 
 ## 5. Supabase Storage (media uploads)
 
