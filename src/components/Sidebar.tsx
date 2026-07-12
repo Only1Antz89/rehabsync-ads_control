@@ -10,6 +10,7 @@ import {
   CalendarDays,
   ListChecks,
   Inbox,
+  MessageSquare,
   BarChart3,
   Mail,
   Users,
@@ -32,6 +33,7 @@ const ICONS = {
   calendar: CalendarDays,
   posts: ListChecks,
   inbox: Inbox,
+  inboxInsights: MessageSquare,
   analytics: BarChart3,
   newsletters: Mail,
   subscribers: Users,
@@ -68,7 +70,10 @@ function buildNav(isAdmin: boolean): NavGroup[] {
     },
     {
       groupName: 'Engage',
-      items: [{ label: 'Inbox', href: '/inbox', icon: 'inbox' }],
+      items: [
+        { label: 'Inbox', href: '/inbox', icon: 'inbox' },
+        { label: 'Inbox insights', href: '/inbox/analytics', icon: 'inboxInsights' },
+      ],
     },
     {
       groupName: 'Audience',

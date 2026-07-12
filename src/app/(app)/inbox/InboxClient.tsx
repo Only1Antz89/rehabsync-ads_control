@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, Send, Circle } from 'lucide-react';
+import { ExternalLink, Send, Circle, Sparkles } from 'lucide-react';
 import { Badge, Button, Card } from '@/components/ui';
 import type { BadgeVariant } from '@/components/ui';
 
@@ -71,6 +71,8 @@ export function InboxClient({ me }: { me: string }) {
   const [detail, setDetail] = useState<{ thread: Thread; messages: Message[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [reply, setReply] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
 
   // Filters
   const [status, setStatus] = useState<string>('open');
@@ -127,6 +129,22 @@ export function InboxClient({ me }: { me: string }) {
       }
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function suggest() {
+    if (!selectedId) return;
+    setAiBusy(true);
+    setAiNote(null);
+    try {
+      const res = await fetch(`/api/inbox/threads/${selectedId}/suggest`, { method: 'POST' });
+      const d = (await res.json().catch(() => null)) as { suggestion?: string; error?: string } | null;
+      if (res.ok && d?.suggestion) setReply(d.suggestion);
+      else setAiNote(d?.error ?? 'Suggestion unavailable.');
+    } catch {
+      setAiNote('Suggestion unavailable.');
+    } finally {
+      setAiBusy(false);
     }
   }
 
@@ -315,13 +333,18 @@ export function InboxClient({ me }: { me: string }) {
                     className="w-full rounded-lg border px-3 py-2 text-sm"
                     style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
                   />
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      Replies to networks without a connected write scope are queued until it&apos;s wired.
+                  <div className="flex items-center justify-between mt-2 gap-2">
+                    <span className="text-xs" style={{ color: aiNote ? 'var(--color-warning-text)' : 'var(--text-muted)' }}>
+                      {aiNote ?? 'Replies to networks without a connected write scope are queued until it’s wired.'}
                     </span>
-                    <Button type="submit" size="sm" loading={busy === 'reply'} disabled={!reply.trim()}>
-                      <Send size={14} className="mr-1" /> Send
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button type="button" size="sm" variant="secondary" loading={aiBusy} onClick={() => void suggest()}>
+                        <Sparkles size={14} className="mr-1" /> Suggest
+                      </Button>
+                      <Button type="submit" size="sm" loading={busy === 'reply'} disabled={!reply.trim()}>
+                        <Send size={14} className="mr-1" /> Send
+                      </Button>
+                    </div>
                   </div>
                 </form>
               </div>
