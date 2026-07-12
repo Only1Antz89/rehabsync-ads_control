@@ -46,6 +46,7 @@ interface CreateBody {
   body?: string;
   linkUrl?: string | null;
   imageUrl?: string | null;
+  imageUrls?: string[];
   videoUrl?: string | null;
   title?: string | null;
   accountIds?: string[];
@@ -90,11 +91,18 @@ export async function POST(req: Request) {
     );
   }
 
+  // Carousel-ready image list; imageUrl mirrors the first (what API publishing uses today).
+  const imageUrls = Array.isArray(input.imageUrls)
+    ? [...new Set(input.imageUrls.map((u) => String(u).trim()).filter(Boolean))].slice(0, 10)
+    : [];
+  const primaryImage = input.imageUrl?.trim() || imageUrls[0] || null;
+  const storedImageUrls = imageUrls.length ? imageUrls : primaryImage ? [primaryImage] : [];
+
   // Validate the draft against every selected platform; blocking problems reject the request.
   const draft = {
     body,
     linkUrl: input.linkUrl,
-    imageUrl: input.imageUrl,
+    imageUrl: primaryImage,
     videoUrl: input.videoUrl,
     title: input.title,
   };
@@ -130,7 +138,8 @@ export async function POST(req: Request) {
     .values({
       body,
       linkUrl: input.linkUrl?.trim() || null,
-      imageUrl: input.imageUrl?.trim() || null,
+      imageUrl: primaryImage,
+      imageUrls: storedImageUrls,
       videoUrl: input.videoUrl?.trim() || null,
       title: input.title?.trim() || null,
       status,

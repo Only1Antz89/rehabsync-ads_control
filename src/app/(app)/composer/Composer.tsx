@@ -35,6 +35,13 @@ interface Account {
   status: string;
 }
 
+interface MediaAsset {
+  id: string;
+  url: string;
+  kind: string;
+  filename: string | null;
+}
+
 const MANUAL_CHOICES: SocialPlatform[] = ['linkedin', 'x', 'tiktok', 'youtube'];
 
 export function Composer() {
@@ -42,8 +49,11 @@ export function Composer() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [body, setBody] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [images, setImages] = useState<string[]>([]);
+  const [manualImage, setManualImage] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
+  const [library, setLibrary] = useState<MediaAsset[]>([]);
+  const [libPicker, setLibPicker] = useState<null | 'image' | 'video'>(null);
   const [title, setTitle] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [manual, setManual] = useState<Set<SocialPlatform>>(new Set());
@@ -57,6 +67,26 @@ export function Composer() {
   const imageFileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
 
+  const loadLibrary = () =>
+    fetch('/api/media')
+      .then((r) => (r.ok ? r.json() : { media: [] }))
+      .then((d: { media: MediaAsset[] }) => setLibrary(d.media))
+      .catch(() => undefined);
+
+  async function recordMedia(url: string, kind: 'image' | 'video', filename: string, sizeBytes: number) {
+    await fetch('/api/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, kind, filename, sizeBytes }),
+    }).catch(() => undefined);
+    loadLibrary();
+  }
+
+  function addImage(url: string) {
+    const u = url.trim();
+    if (u) setImages((prev) => (prev.includes(u) ? prev : [...prev, u]));
+  }
+
   async function onPickFile(kind: 'image' | 'video', e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-picking the same file
@@ -65,7 +95,8 @@ export function Composer() {
     setError(null);
     try {
       const url = await uploadMedia(file);
-      if (kind === 'image') setImageUrl(url);
+      await recordMedia(url, kind, file.name, file.size);
+      if (kind === 'image') addImage(url);
       else setVideoUrl(url);
     } catch (err) {
       setError((err as Error).message);
@@ -83,6 +114,7 @@ export function Composer() {
       .then((res) => (res.ok ? res.json() : { next: null }))
       .then((d: { next: string | null }) => setNextSlot(d.next))
       .catch(() => undefined);
+    loadLibrary();
   }, []);
 
   const setOverride = (key: string, value: string) => setOverrides((prev) => ({ ...prev, [key]: value }));
@@ -91,11 +123,11 @@ export function Composer() {
     () => ({
       body,
       linkUrl: linkUrl || null,
-      imageUrl: imageUrl || null,
+      imageUrl: images[0] ?? null,
       videoUrl: videoUrl || null,
       title: title || null,
     }),
-    [body, linkUrl, imageUrl, videoUrl, title],
+    [body, linkUrl, images, videoUrl, title],
   );
 
   const problems = useMemo(() => {
@@ -124,7 +156,8 @@ export function Composer() {
         body: JSON.stringify({
           body,
           linkUrl: linkUrl || null,
-          imageUrl: imageUrl || null,
+          imageUrl: images[0] ?? null,
+          imageUrls: images,
           videoUrl: videoUrl || null,
           title: title || null,
           accountIds: [...selected],
@@ -169,25 +202,38 @@ export function Composer() {
           />
           <p className="text-xs text-right" style={{ color: 'var(--text-muted)' }}>{body.length} characters</p>
           <Input label="Link (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://rehabsync.app/…" />
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <Input
-                label="Image URL (optional — required for Instagram)"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://…/image.jpg"
-                hint="Public https image — paste a URL or upload."
-              />
+          {/* Images (carousel-ready — the first is primary; API publishing uses the primary today) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                Images {images.length > 1 ? `— carousel of ${images.length}` : '(required for Instagram)'}
+              </label>
+              <div className="flex gap-1.5">
+                <input ref={imageFileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => void onPickFile('image', e)} />
+                <Button type="button" size="sm" variant="secondary" loading={uploading === 'image'} onClick={() => imageFileRef.current?.click()}>Upload</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setLibPicker(libPicker === 'image' ? null : 'image')}>Library</Button>
+              </div>
             </div>
-            <input ref={imageFileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => void onPickFile('image', e)} />
-            <Button type="button" variant="secondary" loading={uploading === 'image'} onClick={() => imageFileRef.current?.click()}>
-              Upload
-            </Button>
+            {images.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {images.map((url, i) => (
+                  <div key={url} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" className="h-20 w-20 object-cover rounded-lg border" style={{ borderColor: 'var(--border-primary)' }} />
+                    {i === 0 && (
+                      <span className="absolute bottom-0 left-0 text-[9px] px-1 rounded-tr" style={{ backgroundColor: 'var(--brand-primary)', color: '#fff' }}>primary</span>
+                    )}
+                    <button type="button" onClick={() => setImages((prev) => prev.filter((u) => u !== url))} className="absolute -top-1.5 -right-1.5 rounded-full h-5 w-5 flex items-center justify-center text-xs leading-none" style={{ backgroundColor: 'var(--color-error)', color: '#fff' }} aria-label="Remove image">×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input value={manualImage} onChange={(e) => setManualImage(e.target.value)} placeholder="…or paste an image URL" className="flex-1 rounded-lg border px-3 py-2 text-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} />
+              <Button type="button" size="sm" variant="secondary" onClick={() => { addImage(manualImage); setManualImage(''); }}>Add</Button>
+            </div>
           </div>
-          {imageUrl.trim() && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt="Preview" className="max-h-48 rounded-lg border" style={{ borderColor: 'var(--border-primary)' }} />
-          )}
+
           <div className="flex items-end gap-2">
             <div className="flex-1">
               <Input
@@ -199,10 +245,36 @@ export function Composer() {
               />
             </div>
             <input ref={videoFileRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden" onChange={(e) => void onPickFile('video', e)} />
-            <Button type="button" variant="secondary" loading={uploading === 'video'} onClick={() => videoFileRef.current?.click()}>
-              Upload
-            </Button>
+            <Button type="button" variant="secondary" loading={uploading === 'video'} onClick={() => videoFileRef.current?.click()}>Upload</Button>
+            <Button type="button" variant="ghost" onClick={() => setLibPicker(libPicker === 'video' ? null : 'video')}>Library</Button>
           </div>
+
+          {libPicker && (
+            <div className="rounded-lg border p-2" style={{ borderColor: 'var(--border-primary)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Media library — {libPicker}s</span>
+                <button type="button" onClick={() => setLibPicker(null)} className="text-xs" style={{ color: 'var(--text-muted)' }}>close</button>
+              </div>
+              {library.filter((m) => m.kind === libPicker).length === 0 ? (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nothing saved yet — uploads are added to the library automatically.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                  {library
+                    .filter((m) => m.kind === libPicker)
+                    .map((m) =>
+                      libPicker === 'image' ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={m.id} src={m.url} alt={m.filename ?? ''} onClick={() => addImage(m.url)} className="h-16 w-16 object-cover rounded border cursor-pointer" style={{ borderColor: 'var(--border-primary)' }} />
+                      ) : (
+                        <button key={m.id} type="button" onClick={() => { setVideoUrl(m.url); setLibPicker(null); }} className="text-xs px-2 py-1 rounded border max-w-40 truncate" style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
+                          {m.filename ?? m.url}
+                        </button>
+                      ),
+                    )}
+                </div>
+              )}
+            </div>
+          )}
           <Input
             label="Title (required for YouTube)"
             value={title}

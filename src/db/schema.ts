@@ -107,6 +107,8 @@ export const adsPosts = pgTable(
     body: text('body').notNull().default(''),
     linkUrl: text('link_url'),
     imageUrl: text('image_url'),
+    // Carousel-ready ordered image list (P2 media). imageUrl mirrors the first entry.
+    imageUrls: jsonb('image_urls').$type<string[]>().default([]).notNull(),
     videoUrl: text('video_url'),
     title: varchar('title', { length: 100 }),
     status: varchar('status', { length: 20 }).notNull().default('draft'),
@@ -164,6 +166,24 @@ export const adsPostingSlots = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [uniqueIndex('ads_posting_slots_unique_idx').on(table.weekday, table.minutes)],
+);
+
+// ── Media library (P2 media): reusable uploaded assets, pickable in the composer. ──
+export const adsMedia = pgTable(
+  'ads_media',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    url: text('url').notNull(),
+    kind: varchar('kind', { length: 10 }).notNull().default('image'),
+    filename: varchar('filename', { length: 255 }),
+    sizeBytes: integer('size_bytes'),
+    uploadedBy: varchar('uploaded_by', { length: 255 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('ads_media_url_idx').on(table.url),
+    index('ads_media_kind_idx').on(table.kind, table.createdAt),
+  ],
 );
 
 export const adsPostMetrics = pgTable(
