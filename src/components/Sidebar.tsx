@@ -11,6 +11,7 @@ import {
   ListChecks,
   Inbox,
   MessageSquare,
+  Radar,
   BarChart3,
   Mail,
   Users,
@@ -34,6 +35,7 @@ const ICONS = {
   posts: ListChecks,
   inbox: Inbox,
   inboxInsights: MessageSquare,
+  listening: Radar,
   analytics: BarChart3,
   newsletters: Mail,
   subscribers: Users,
@@ -72,6 +74,7 @@ function buildNav(isAdmin: boolean): NavGroup[] {
       groupName: 'Engage',
       items: [
         { label: 'Inbox', href: '/inbox', icon: 'inbox' },
+        { label: 'Listening', href: '/listening', icon: 'listening' },
         { label: 'Inbox insights', href: '/inbox/analytics', icon: 'inboxInsights' },
       ],
     },

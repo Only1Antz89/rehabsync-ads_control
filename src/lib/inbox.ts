@@ -8,9 +8,10 @@ import {
 } from '@/db';
 import type { InboxThreadKind } from '@/db';
 import { notifyLark } from './lark';
+import { isEngagePlatform } from './engage-platforms';
+import type { EngagePlatform } from './engage-platforms';
 
-const PLATFORMS = ['facebook', 'instagram', 'linkedin', 'tiktok', 'youtube'] as const;
-export type Platform = (typeof PLATFORMS)[number];
+export type Platform = EngagePlatform;
 
 export interface NormalizedInbound {
   platform: string;
@@ -32,7 +33,7 @@ export interface NormalizedInbound {
 export function normalizeInbound(input: unknown): NormalizedInbound | { error: string } {
   const p = (input ?? {}) as Record<string, unknown>;
   const platform = String(p['platform'] ?? '').toLowerCase();
-  if (!(PLATFORMS as readonly string[]).includes(platform)) return { error: 'Unknown or missing platform.' };
+  if (!isEngagePlatform(platform)) return { error: 'Unknown or missing platform.' };
   const threadExternalId = String(p['threadExternalId'] ?? p['externalId'] ?? '').trim();
   if (!threadExternalId) return { error: 'threadExternalId is required.' };
   const msg = (p['message'] ?? {}) as Record<string, unknown>;

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ExternalLink, Send, Circle, Sparkles } from 'lucide-react';
 import { Badge, Button, Card } from '@/components/ui';
 import type { BadgeVariant } from '@/components/ui';
+import { ENGAGE_PLATFORMS, engagePlatformLabel } from '@/lib/engage-platforms';
 
 interface Thread {
   id: string;
@@ -35,14 +36,6 @@ interface Counts {
   open: number;
   unread: number;
 }
-
-const PLATFORM_LABELS: Record<string, string> = {
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  linkedin: 'LinkedIn',
-  tiktok: 'TikTok',
-  youtube: 'YouTube',
-};
 
 const STATUS_TABS = ['open', 'pending', 'closed', 'spam'] as const;
 
@@ -196,8 +189,8 @@ export function InboxClient({ me }: { me: string }) {
           style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
         >
           <option value="">All networks</option>
-          {Object.entries(PLATFORM_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
+          {ENGAGE_PLATFORMS.map((p) => (
+            <option key={p} value={p}>{engagePlatformLabel(p)}</option>
           ))}
         </select>
         <select
@@ -253,7 +246,7 @@ export function InboxClient({ me }: { me: string }) {
                           <span className="block text-xs truncate mt-0.5" style={{ color: 'var(--text-secondary)' }}>{t.snippet}</span>
                           <span className="flex items-center gap-1.5 mt-1">
                             <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
-                              {PLATFORM_LABELS[t.platform] ?? t.platform}
+                              {engagePlatformLabel(t.platform)}
                             </span>
                             <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t.kind}</span>
                             {t.assignedTo && <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>· {t.assignedTo === me ? 'you' : t.assignedTo}</span>}
@@ -283,7 +276,7 @@ export function InboxClient({ me }: { me: string }) {
                       <Badge variant={statusVariant(thread.status)}>{thread.status}</Badge>
                     </div>
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {PLATFORM_LABELS[thread.platform] ?? thread.platform} · {thread.kind}
+                      {engagePlatformLabel(thread.platform)} · {thread.kind}
                       {thread.authorHandle ? ` · ${thread.authorHandle}` : ''}
                       {thread.permalink && (
                         <>

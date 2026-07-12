@@ -382,6 +382,48 @@ export const adsInboxMessages = pgTable(
   (table) => [index('ads_inbox_messages_thread_idx').on(table.threadId, table.createdAt)],
 );
 
+// ── Social listening (P4): keyword/mention streams + matched public mentions across networks. ──
+export const LISTENING_SENTIMENTS = ['positive', 'neutral', 'negative', 'unknown'] as const;
+export type ListeningSentiment = (typeof LISTENING_SENTIMENTS)[number];
+
+export const LISTENING_MENTION_STATUSES = ['new', 'reviewed', 'archived'] as const;
+export type ListeningMentionStatus = (typeof LISTENING_MENTION_STATUSES)[number];
+
+export const adsListeningQueries = pgTable('ads_listening_queries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 160 }).notNull(),
+  terms: jsonb('terms').$type<string[]>().default([]).notNull(),
+  platforms: jsonb('platforms').$type<string[]>().default([]).notNull(), // empty = all networks
+  active: boolean('active').notNull().default(true),
+  createdBy: varchar('created_by', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const adsListeningMentions = pgTable(
+  'ads_listening_mentions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    queryId: uuid('query_id').references(() => adsListeningQueries.id, { onDelete: 'set null' }),
+    platform: varchar('platform', { length: 20 }).notNull(),
+    externalId: varchar('external_id', { length: 200 }).notNull(),
+    authorName: varchar('author_name', { length: 200 }),
+    authorHandle: varchar('author_handle', { length: 200 }),
+    permalink: varchar('permalink', { length: 600 }),
+    content: text('content').notNull(),
+    sentiment: varchar('sentiment', { length: 12 }).notNull().default('unknown'),
+    matchedTerm: varchar('matched_term', { length: 160 }),
+    status: varchar('status', { length: 12 }).notNull().default('new'),
+    meta: jsonb('meta').$type<Record<string, unknown>>().default({}).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('ads_listening_mentions_platform_ext_idx').on(table.platform, table.externalId),
+    index('ads_listening_mentions_status_idx').on(table.status, table.createdAt),
+    index('ads_listening_mentions_query_idx').on(table.queryId),
+  ],
+);
+
 // ── Cron controller: per-job enable switch + last-run telemetry (managed in /admin/automation) ──
 export const adsCronJobs = pgTable('ads_cron_jobs', {
   key: varchar('key', { length: 40 }).primaryKey(),

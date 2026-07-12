@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Card } from '@/components/ui';
+import { engagePlatformLabel } from '@/lib/engage-platforms';
 
 interface Analytics {
   totals: { threads: number; open: number; pending: number; closed: number; spam: number; unread: number };
@@ -12,14 +13,6 @@ interface Analytics {
   byAssignee: { assignee: string; open: number }[];
   weekly: { day: string; inbound: number }[];
 }
-
-const PLATFORM_LABELS: Record<string, string> = {
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  linkedin: 'LinkedIn',
-  tiktok: 'TikTok',
-  youtube: 'YouTube',
-};
 
 function Bar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 && value > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
@@ -95,7 +88,7 @@ export function InboxAnalyticsClient() {
               {data.byPlatform.map((p) => (
                 <div key={p.platform}>
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span style={{ color: 'var(--text-primary)' }}>{PLATFORM_LABELS[p.platform] ?? p.platform}</span>
+                    <span style={{ color: 'var(--text-primary)' }}>{engagePlatformLabel(p.platform)}</span>
                     <span style={{ color: 'var(--text-secondary)' }}>{p.count}</span>
                   </div>
                   <Bar value={p.count} max={platMax} />
