@@ -292,6 +292,61 @@ export const adsSuppressions = pgTable('ads_suppressions', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// ── Unified inbox: engagement (comments / mentions / DMs / reviews) across connected networks ──
+export const INBOX_THREAD_KINDS = ['comment', 'mention', 'dm', 'reply', 'review'] as const;
+export type InboxThreadKind = (typeof INBOX_THREAD_KINDS)[number];
+
+export const INBOX_STATUSES = ['open', 'pending', 'closed', 'spam'] as const;
+export type InboxStatus = (typeof INBOX_STATUSES)[number];
+
+export const adsInboxThreads = pgTable(
+  'ads_inbox_threads',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id').references(() => adsSocialAccounts.id, { onDelete: 'set null' }),
+    platform: varchar('platform', { length: 20 }).notNull(),
+    externalId: varchar('external_id', { length: 200 }).notNull(),
+    kind: varchar('kind', { length: 20 }).notNull().default('comment'),
+    authorName: varchar('author_name', { length: 200 }),
+    authorHandle: varchar('author_handle', { length: 200 }),
+    permalink: varchar('permalink', { length: 600 }),
+    snippet: text('snippet'),
+    status: varchar('status', { length: 20 }).notNull().default('open'),
+    assignedTo: varchar('assigned_to', { length: 255 }),
+    unread: boolean('unread').notNull().default(true),
+    lastMessageAt: timestamp('last_message_at').defaultNow().notNull(),
+    meta: jsonb('meta').$type<Record<string, unknown>>().default({}).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('ads_inbox_threads_platform_ext_idx').on(table.platform, table.externalId),
+    index('ads_inbox_threads_status_idx').on(table.status, table.lastMessageAt),
+  ],
+);
+
+export const INBOX_MESSAGE_STATUSES = ['received', 'queued', 'sent', 'failed'] as const;
+export type InboxMessageStatus = (typeof INBOX_MESSAGE_STATUSES)[number];
+
+export const adsInboxMessages = pgTable(
+  'ads_inbox_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    threadId: uuid('thread_id')
+      .notNull()
+      .references(() => adsInboxThreads.id, { onDelete: 'cascade' }),
+    direction: varchar('direction', { length: 10 }).notNull(), // 'in' (from the audience) | 'out' (our reply)
+    externalId: varchar('external_id', { length: 200 }),
+    authorName: varchar('author_name', { length: 200 }),
+    body: text('body').notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('received'),
+    sentBy: varchar('sent_by', { length: 255 }),
+    errorText: text('error_text'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [index('ads_inbox_messages_thread_idx').on(table.threadId, table.createdAt)],
+);
+
 // ── Cron controller: per-job enable switch + last-run telemetry (managed in /admin/automation) ──
 export const adsCronJobs = pgTable('ads_cron_jobs', {
   key: varchar('key', { length: 40 }).primaryKey(),

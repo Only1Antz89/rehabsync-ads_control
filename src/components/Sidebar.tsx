@@ -9,6 +9,7 @@ import {
   PenSquare,
   CalendarDays,
   ListChecks,
+  Inbox,
   BarChart3,
   Mail,
   Users,
@@ -29,6 +30,7 @@ const ICONS = {
   composer: PenSquare,
   calendar: CalendarDays,
   posts: ListChecks,
+  inbox: Inbox,
   analytics: BarChart3,
   newsletters: Mail,
   subscribers: Users,
@@ -61,6 +63,10 @@ function buildNav(isAdmin: boolean): NavGroup[] {
         { label: 'Calendar', href: '/calendar', icon: 'calendar' },
         { label: 'Posts', href: '/posts', icon: 'posts' },
       ],
+    },
+    {
+      groupName: 'Engage',
+      items: [{ label: 'Inbox', href: '/inbox', icon: 'inbox' }],
     },
     {
       groupName: 'Audience',
