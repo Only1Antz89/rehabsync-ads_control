@@ -136,6 +136,8 @@ export const adsPostTargets = pgTable(
       .references(() => adsPosts.id, { onDelete: 'cascade' }),
     accountId: uuid('account_id').references(() => adsSocialAccounts.id, { onDelete: 'cascade' }),
     platform: varchar('platform', { length: 20 }).notNull(),
+    // Per-network caption override (P2). Null = use the post's base body.
+    bodyOverride: text('body_override'),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
     platformPostId: varchar('platform_post_id', { length: 160 }),
     platformUrl: text('platform_url'),
@@ -149,6 +151,19 @@ export const adsPostTargets = pgTable(
     index('ads_post_targets_post_idx').on(table.postId),
     index('ads_post_targets_status_idx').on(table.status),
   ],
+);
+
+// ── Scheduling queue (P2): weekly posting slots; "add to queue" fills the next free one. ──
+export const adsPostingSlots = pgTable(
+  'ads_posting_slots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    weekday: smallint('weekday').notNull(), // 0=Sunday … 6=Saturday (UTC)
+    minutes: integer('minutes').notNull(), // minutes since midnight (UTC)
+    createdBy: varchar('created_by', { length: 255 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex('ads_posting_slots_unique_idx').on(table.weekday, table.minutes)],
 );
 
 export const adsPostMetrics = pgTable(

@@ -114,17 +114,19 @@ async function processPost(post: Post): Promise<void> {
 
   // Tool-wide UTM defaults are applied to the outbound link once, at publish time.
   const settings = await getSettings();
-  const input: PublishInput = {
-    body: post.body,
-    linkUrl: post.linkUrl ? appendUtm(post.linkUrl, settings) : post.linkUrl,
-    imageUrl: post.imageUrl,
-    videoUrl: post.videoUrl,
-    title: post.title,
-  };
+  const linkUrl = post.linkUrl ? appendUtm(post.linkUrl, settings) : post.linkUrl;
 
   for (const target of targets) {
     if (target.status === 'failed' && target.attemptCount >= MAX_ATTEMPTS) continue;
     if (target.accountId === null) continue; // manual-export targets are completed by a human
+    // Per-network caption override (P2) falls back to the post's base body.
+    const input: PublishInput = {
+      body: target.bodyOverride ?? post.body,
+      linkUrl,
+      imageUrl: post.imageUrl,
+      videoUrl: post.videoUrl,
+      title: post.title,
+    };
     await publishTarget(post, target, input);
   }
   await recomputePostStatus(post.id);

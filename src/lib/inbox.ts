@@ -7,6 +7,7 @@ import {
   INBOX_THREAD_KINDS,
 } from '@/db';
 import type { InboxThreadKind } from '@/db';
+import { notifyLark } from './lark';
 
 const PLATFORMS = ['facebook', 'instagram', 'linkedin', 'tiktok', 'youtube'] as const;
 export type Platform = (typeof PLATFORMS)[number];
@@ -124,6 +125,14 @@ export async function ingestInbound(evt: NormalizedInbound): Promise<{ threadId:
     status: 'received',
     createdAt: messageAt,
   });
+
+  // Optional team alert to Lark/Feishu (no-op unless REHABSYNC_LARK_WEBHOOK_URL is set).
+  const author = evt.authorName ?? evt.message.authorName ?? 'someone';
+  const appUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
+  await notifyLark(
+    `📥 New ${evt.kind} on ${evt.platform} from ${author}:\n"${evt.message.body.slice(0, 180)}"` +
+      (appUrl ? `\n${appUrl}/inbox` : ''),
+  );
 
   return { threadId, created };
 }

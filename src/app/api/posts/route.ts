@@ -7,6 +7,7 @@ import { isResponse, requireSession } from '@/lib/route-auth';
 import { getSettings } from '@/lib/settings';
 import { blockingProblems, PLATFORM_RULES } from '@/lib/social/validate';
 import { publishPostNow } from '@/lib/publisher';
+import { nextQueueSlot } from '@/lib/queue';
 import { recordAudit } from '@/lib/audit';
 
 export async function GET() {
@@ -51,6 +52,9 @@ interface CreateBody {
   manualPlatforms?: string[];
   scheduledAt?: string | null;
   publishNow?: boolean;
+  addToQueue?: boolean;
+  // Per-network caption overrides, keyed by account id (API targets) or platform (manual targets).
+  overrides?: Record<string, string>;
 }
 
 export async function POST(req: Request) {
@@ -102,7 +106,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: problems.join(' · ') }, { status: 400 });
   }
 
-  const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+  // "Add to queue" resolves the next free posting slot; otherwise use the explicit schedule.
+  let scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+  if (input.addToQueue && !input.publishNow) {
+    const slot = await nextQueueSlot();
+    if (!slot) {
+      return NextResponse.json(
+        { error: 'No posting-queue slots configured — add some under Posting queue first.' },
+        { status: 400 },
+      );
+    }
+    scheduledAt = slot;
+  }
   const wantsSchedule = Boolean(scheduledAt) && !input.publishNow;
   const status = input.publishNow ? 'scheduled' : wantsSchedule ? 'scheduled' : 'draft';
 
@@ -125,11 +140,18 @@ export async function POST(req: Request) {
     })
     .returning();
 
+  // Per-network caption override; only stored when it actually differs from the base body.
+  const overrideFor = (key: string): string | null => {
+    const t = input.overrides?.[key]?.trim();
+    return t && t !== body ? t.slice(0, 5000) : null;
+  };
+
   await db.insert(adsPostTargets).values([
     ...accounts.map((account) => ({
       postId: post!.id,
       accountId: account.id,
       platform: account.platform,
+      bodyOverride: overrideFor(account.id),
       status: 'pending' as const,
     })),
     ...manualPlatforms
@@ -138,6 +160,7 @@ export async function POST(req: Request) {
         postId: post!.id,
         accountId: null,
         platform,
+        bodyOverride: overrideFor(platform),
         status: 'manual' as const,
       })),
   ]);
@@ -160,5 +183,9 @@ export async function POST(req: Request) {
     const finalStatus = await publishPostNow(post!.id);
     return NextResponse.json({ post: { ...post, status: finalStatus } }, { status: 201 });
   }
-  return NextResponse.json({ post }, { status: 201 });
+  const queuedNotice =
+    input.addToQueue && scheduledAt
+      ? `Added to the queue — publishes ${scheduledAt.toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC.`
+      : undefined;
+  return NextResponse.json({ post, notice: queuedNotice }, { status: 201 });
 }

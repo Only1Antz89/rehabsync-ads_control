@@ -48,6 +48,8 @@ export function Composer() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [manual, setManual] = useState<Set<SocialPlatform>>(new Set());
   const [scheduledAt, setScheduledAt] = useState('');
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [nextSlot, setNextSlot] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -77,7 +79,13 @@ export function Composer() {
       .then((res) => (res.ok ? res.json() : { accounts: [] }))
       .then((d: { accounts: Account[] }) => setAccounts(d.accounts.filter((a) => a.status === 'connected')))
       .catch(() => setAccounts([]));
+    fetch('/api/queue/slots')
+      .then((res) => (res.ok ? res.json() : { next: null }))
+      .then((d: { next: string | null }) => setNextSlot(d.next))
+      .catch(() => undefined);
   }, []);
+
+  const setOverride = (key: string, value: string) => setOverrides((prev) => ({ ...prev, [key]: value }));
 
   const draft = useMemo(
     () => ({
@@ -105,7 +113,7 @@ export function Composer() {
     update(next);
   }
 
-  async function submit(mode: 'draft' | 'schedule' | 'now') {
+  async function submit(mode: 'draft' | 'schedule' | 'now' | 'queue') {
     setBusy(mode);
     setError(null);
     setNotice(null);
@@ -123,6 +131,8 @@ export function Composer() {
           manualPlatforms: [...manual],
           scheduledAt: mode === 'schedule' ? scheduledAt || null : null,
           publishNow: mode === 'now',
+          addToQueue: mode === 'queue',
+          overrides,
         }),
       });
       const data = (await res.json().catch(() => null)) as { error?: string; notice?: string } | null;
@@ -233,6 +243,45 @@ export function Composer() {
           </div>
         </Card>
 
+        {targetsPicked && (
+          <Card title="Per-network captions" description="Optional — leave blank to use the caption above. Tailor tone or hashtags per network.">
+            <div className="space-y-3">
+              {accounts.filter((a) => selected.has(a.id)).map((a) => (
+                <div key={a.id}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{a.displayName}</span>
+                    <Badge variant="info">{PLATFORM_RULES[a.platform].label}</Badge>
+                  </div>
+                  <textarea
+                    value={overrides[a.id] ?? ''}
+                    onChange={(e) => setOverride(a.id, e.target.value)}
+                    rows={2}
+                    placeholder={body || 'Uses the base caption'}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+              ))}
+              {[...manual].map((platform) => (
+                <div key={platform}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{PLATFORM_RULES[platform].label}</span>
+                    <Badge variant="neutral">manual</Badge>
+                  </div>
+                  <textarea
+                    value={overrides[platform] ?? ''}
+                    onChange={(e) => setOverride(platform, e.target.value)}
+                    rows={2}
+                    placeholder={body || 'Uses the base caption'}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         <Card title="Publish">
           {problems.length > 0 && (
             <ul className="mb-3 space-y-1">
@@ -257,6 +306,12 @@ export function Composer() {
                 className="rounded-lg border px-3 py-2 text-sm"
                 style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
               />
+              {nextSlot && (
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Or add to the queue → next free slot{' '}
+                  {new Date(nextSlot).toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC.
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void submit('now')} disabled={!targetsPicked || blocking.length > 0} loading={busy === 'now'}>
@@ -264,6 +319,9 @@ export function Composer() {
               </Button>
               <Button variant="secondary" onClick={() => void submit('schedule')} disabled={!targetsPicked || !scheduledAt || blocking.length > 0} loading={busy === 'schedule'}>
                 Schedule
+              </Button>
+              <Button variant="secondary" onClick={() => void submit('queue')} disabled={!targetsPicked || !nextSlot || blocking.length > 0} loading={busy === 'queue'}>
+                Add to queue
               </Button>
               <Button variant="ghost" onClick={() => void submit('draft')} disabled={!targetsPicked} loading={busy === 'draft'}>
                 Save draft
