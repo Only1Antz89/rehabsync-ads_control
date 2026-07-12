@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
-import { syncMetrics } from '@/lib/metrics';
+import { guardedRun } from '@/lib/cron';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-/** Vercel Cron target — hourly engagement + follower snapshots. CRON_SECRET-guarded. */
+/** External-scheduler target — engagement + follower snapshots. CRON_SECRET-guarded.
+ *  No-ops when the `metrics` job is paused in /admin/automation. */
 export async function GET(req: Request) {
   const secret = process.env['CRON_SECRET'];
   const auth = req.headers.get('authorization');
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const result = await syncMetrics();
-  return NextResponse.json({ ok: true, ...result });
+  return NextResponse.json(await guardedRun('metrics'));
 }

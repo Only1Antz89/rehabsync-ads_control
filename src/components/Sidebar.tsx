@@ -16,6 +16,7 @@ import {
   Plug,
   CheckSquare,
   SlidersHorizontal,
+  Timer,
   ScrollText,
   LogOut,
   Menu,
@@ -35,6 +36,7 @@ const ICONS = {
   admin: Settings,
   approvals: CheckSquare,
   settings: SlidersHorizontal,
+  automation: Timer,
   audit: ScrollText,
 } as const;
 
@@ -77,6 +79,7 @@ function buildNav(isAdmin: boolean): NavGroup[] {
         { label: 'Approvals', href: '/admin/approvals', icon: 'approvals' },
         { label: 'Users', href: '/admin/users', icon: 'admin' },
         { label: 'Settings', href: '/admin/settings', icon: 'settings' },
+        { label: 'Automation', href: '/admin/automation', icon: 'automation' },
         { label: 'Audit log', href: '/admin/audit', icon: 'audit' },
       ],
     });
