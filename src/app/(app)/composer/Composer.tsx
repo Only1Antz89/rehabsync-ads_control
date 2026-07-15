@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Badge, Button, Card, Input } from '@/components/ui';
 import { PLATFORM_RULES, validateForPlatform } from '@/lib/social/validate';
 import type { SocialPlatform } from '@/db/schema';
+import { PreviewPanel } from './PreviewPanel';
+import type { PreviewTarget } from './PreviewPanel';
 
 /** Sign with our API, then PUT the file straight to Supabase Storage; returns the public URL. */
 async function uploadMedia(file: File): Promise<string> {
@@ -44,9 +46,12 @@ interface MediaAsset {
 
 const MANUAL_CHOICES: SocialPlatform[] = ['linkedin', 'x', 'tiktok', 'youtube'];
 
-export function Composer() {
+export function Composer({ editId = null }: { editId?: string | null }) {
   const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>([]);
+  // Edit mode: targets are fixed on an existing post; we load content + overrides into the form.
+  const [editTargets, setEditTargets] = useState<PreviewTarget[]>([]);
+  const [editStatus, setEditStatus] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [images, setImages] = useState<string[]>([]);
@@ -119,6 +124,46 @@ export function Composer() {
 
   const setOverride = (key: string, value: string) => setOverrides((prev) => ({ ...prev, [key]: value }));
 
+  // Edit mode loader — populate the form from the existing post + its targets.
+  useEffect(() => {
+    if (!editId) return;
+    fetch(`/api/posts/${editId}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('load'))))
+      .then(
+        (d: {
+          post: {
+            body: string;
+            linkUrl: string | null;
+            imageUrl: string | null;
+            imageUrls: string[] | null;
+            videoUrl: string | null;
+            title: string | null;
+            status: string;
+            scheduledAt: string | null;
+          };
+          targets: { accountId: string | null; platform: SocialPlatform; accountName: string | null; bodyOverride: string | null }[];
+        }) => {
+          setBody(d.post.body);
+          setLinkUrl(d.post.linkUrl ?? '');
+          setVideoUrl(d.post.videoUrl ?? '');
+          setTitle(d.post.title ?? '');
+          const imgs = d.post.imageUrls?.length ? d.post.imageUrls : d.post.imageUrl ? [d.post.imageUrl] : [];
+          setImages(imgs);
+          setEditStatus(d.post.status);
+          if (d.post.scheduledAt) setScheduledAt(d.post.scheduledAt.slice(0, 16));
+          const nextOverrides: Record<string, string> = {};
+          const targets: PreviewTarget[] = d.targets.map((t) => {
+            const key = t.accountId ?? t.platform;
+            if (t.bodyOverride) nextOverrides[key] = t.bodyOverride;
+            return { key, name: t.accountName ?? PLATFORM_RULES[t.platform].label, platform: t.platform };
+          });
+          setOverrides(nextOverrides);
+          setEditTargets(targets);
+        },
+      )
+      .catch(() => setError('Could not load this post for editing.'));
+  }, [editId]);
+
   const draft = useMemo(
     () => ({
       body,
@@ -130,13 +175,21 @@ export function Composer() {
     [body, linkUrl, images, videoUrl, title],
   );
 
+  // Unified target list driving validation, per-network captions and the preview cards.
+  const previewTargets = useMemo<PreviewTarget[]>(() => {
+    if (editId) return editTargets;
+    return [
+      ...accounts
+        .filter((a) => selected.has(a.id))
+        .map((a) => ({ key: a.id, name: a.displayName, platform: a.platform })),
+      ...[...manual].map((p) => ({ key: p, name: PLATFORM_RULES[p].label, platform: p })),
+    ];
+  }, [editId, editTargets, accounts, selected, manual]);
+
   const problems = useMemo(() => {
-    const platforms = new Set<SocialPlatform>([
-      ...accounts.filter((a) => selected.has(a.id)).map((a) => a.platform),
-      ...manual,
-    ]);
+    const platforms = new Set<SocialPlatform>(previewTargets.map((t) => t.platform));
     return [...platforms].flatMap((p) => validateForPlatform(draft, p));
-  }, [accounts, selected, manual, draft]);
+  }, [previewTargets, draft]);
 
   function toggle<T>(set: Set<T>, value: T, update: (next: Set<T>) => void) {
     const next = new Set(set);
@@ -145,7 +198,55 @@ export function Composer() {
     update(next);
   }
 
+  /** Edit mode: PATCH content/media/overrides/schedule; optionally publish after saving. */
+  async function submitEdit(mode: 'draft' | 'schedule' | 'now') {
+    if (!editId) return;
+    setBusy(mode);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/posts/${editId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          body,
+          linkUrl: linkUrl || null,
+          imageUrls: images,
+          videoUrl: videoUrl || null,
+          title: title || null,
+          overrides,
+          ...(mode === 'schedule' ? { scheduledAt: scheduledAt || null } : {}),
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setError(data?.error ?? 'Save failed.');
+        return;
+      }
+      if (mode === 'now') {
+        const pub = await fetch(`/api/posts/${editId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'publish_now' }),
+        });
+        const pubData = (await pub.json().catch(() => null)) as { error?: string } | null;
+        if (!pub.ok) {
+          setError(pubData?.error ?? 'Saved, but publishing failed.');
+          return;
+        }
+      }
+      router.push('/posts');
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function submit(mode: 'draft' | 'schedule' | 'now' | 'queue') {
+    if (editId) {
+      if (mode !== 'queue') await submitEdit(mode);
+      return;
+    }
     setBusy(mode);
     setError(null);
     setNotice(null);
@@ -185,8 +286,9 @@ export function Composer() {
     }
   }
 
-  const targetsPicked = selected.size + manual.size > 0;
+  const targetsPicked = previewTargets.length > 0;
   const blocking = problems.filter((p) => !p.includes('not clickable'));
+  const editLocked = editId !== null && (editStatus === 'published' || editStatus === 'publishing');
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -285,64 +387,69 @@ export function Composer() {
       </Card>
 
       <div className="space-y-5">
-        <Card title="Targets" description="Connected accounts publish via API. Everything else becomes a manual-export checklist item.">
-          {accounts.length > 0 ? (
-            <div className="space-y-2 mb-4">
-              {accounts.map((account) => (
-                <label key={account.id} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
-                  <input type="checkbox" checked={selected.has(account.id)} onChange={() => toggle(selected, account.id, setSelected)} />
-                  {account.displayName}
-                  <Badge variant="info">{PLATFORM_RULES[account.platform].label}</Badge>
+        {editId ? (
+          <Card title="Targets" description="Targets are fixed for an existing post — duplicate it in the composer to change them.">
+            <div className="flex flex-wrap gap-2">
+              {editTargets.map((t) => (
+                <span key={t.key} className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm" style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}>
+                  {t.name}
+                  <Badge variant="info">{PLATFORM_RULES[t.platform].label}</Badge>
+                </span>
+              ))}
+              {editTargets.length === 0 && (
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading…</p>
+              )}
+            </div>
+            {editLocked && (
+              <p className="mt-3 text-sm" style={{ color: 'var(--color-warning-text)' }}>
+                This post is {editStatus} — its content can no longer be edited.
+              </p>
+            )}
+          </Card>
+        ) : (
+          <Card title="Targets" description="Connected accounts publish via API. Everything else becomes a manual-export checklist item.">
+            {accounts.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {accounts.map((account) => (
+                  <label key={account.id} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
+                    <input type="checkbox" checked={selected.has(account.id)} onChange={() => toggle(selected, account.id, setSelected)} />
+                    {account.displayName}
+                    <Badge variant="info">{PLATFORM_RULES[account.platform].label}</Badge>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+                No connected accounts yet — an admin can connect Meta under Connections.
+              </p>
+            )}
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-muted)' }}>
+              Manual export
+            </p>
+            <div className="space-y-2">
+              {MANUAL_CHOICES.map((platform) => (
+                <label key={platform} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
+                  <input type="checkbox" checked={manual.has(platform)} onChange={() => toggle(manual, platform, setManual)} />
+                  {PLATFORM_RULES[platform].label}
+                  <Badge variant="neutral">copy &amp; post</Badge>
                 </label>
               ))}
             </div>
-          ) : (
-            <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-              No connected accounts yet — an admin can connect Meta under Connections.
-            </p>
-          )}
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-muted)' }}>
-            Manual export
-          </p>
-          <div className="space-y-2">
-            {MANUAL_CHOICES.map((platform) => (
-              <label key={platform} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
-                <input type="checkbox" checked={manual.has(platform)} onChange={() => toggle(manual, platform, setManual)} />
-                {PLATFORM_RULES[platform].label}
-                <Badge variant="neutral">copy &amp; post</Badge>
-              </label>
-            ))}
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {targetsPicked && (
           <Card title="Per-network captions" description="Optional — leave blank to use the caption above. Tailor tone or hashtags per network.">
             <div className="space-y-3">
-              {accounts.filter((a) => selected.has(a.id)).map((a) => (
-                <div key={a.id}>
+              {previewTargets.map((t) => (
+                <div key={t.key}>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{a.displayName}</span>
-                    <Badge variant="info">{PLATFORM_RULES[a.platform].label}</Badge>
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t.name}</span>
+                    <Badge variant="info">{PLATFORM_RULES[t.platform].label}</Badge>
                   </div>
                   <textarea
-                    value={overrides[a.id] ?? ''}
-                    onChange={(e) => setOverride(a.id, e.target.value)}
-                    rows={2}
-                    placeholder={body || 'Uses the base caption'}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-                  />
-                </div>
-              ))}
-              {[...manual].map((platform) => (
-                <div key={platform}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{PLATFORM_RULES[platform].label}</span>
-                    <Badge variant="neutral">manual</Badge>
-                  </div>
-                  <textarea
-                    value={overrides[platform] ?? ''}
-                    onChange={(e) => setOverride(platform, e.target.value)}
+                    value={overrides[t.key] ?? ''}
+                    onChange={(e) => setOverride(t.key, e.target.value)}
                     rows={2}
                     placeholder={body || 'Uses the base caption'}
                     className="w-full rounded-lg border px-3 py-2 text-sm"
@@ -351,6 +458,16 @@ export function Composer() {
                 </div>
               ))}
             </div>
+          </Card>
+        )}
+
+        {targetsPicked && (
+          <Card title="Preview" description="How each network will show this post — captions, media, links and character limits.">
+            <PreviewPanel
+              targets={previewTargets}
+              draft={{ body, images, videoUrl: videoUrl || null, title: title || null, linkUrl: linkUrl || null }}
+              overrides={overrides}
+            />
           </Card>
         )}
 
@@ -386,17 +503,19 @@ export function Composer() {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void submit('now')} disabled={!targetsPicked || blocking.length > 0} loading={busy === 'now'}>
-                Publish now
+              <Button onClick={() => void submit('now')} disabled={!targetsPicked || blocking.length > 0 || editLocked} loading={busy === 'now'}>
+                {editId ? 'Save & publish now' : 'Publish now'}
               </Button>
-              <Button variant="secondary" onClick={() => void submit('schedule')} disabled={!targetsPicked || !scheduledAt || blocking.length > 0} loading={busy === 'schedule'}>
-                Schedule
+              <Button variant="secondary" onClick={() => void submit('schedule')} disabled={!targetsPicked || !scheduledAt || blocking.length > 0 || editLocked} loading={busy === 'schedule'}>
+                {editId ? 'Save & schedule' : 'Schedule'}
               </Button>
-              <Button variant="secondary" onClick={() => void submit('queue')} disabled={!targetsPicked || !nextSlot || blocking.length > 0} loading={busy === 'queue'}>
-                Add to queue
-              </Button>
-              <Button variant="ghost" onClick={() => void submit('draft')} disabled={!targetsPicked} loading={busy === 'draft'}>
-                Save draft
+              {!editId && (
+                <Button variant="secondary" onClick={() => void submit('queue')} disabled={!targetsPicked || !nextSlot || blocking.length > 0} loading={busy === 'queue'}>
+                  Add to queue
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => void submit('draft')} disabled={!targetsPicked || editLocked} loading={busy === 'draft'}>
+                {editId ? 'Save changes' : 'Save draft'}
               </Button>
             </div>
           </div>

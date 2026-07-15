@@ -195,6 +195,15 @@ export function PostsList() {
 
           <div className="mt-3 flex flex-wrap gap-2">
             {(post.status === 'draft' || post.status === 'scheduled' || post.status === 'failed' || post.status === 'partial') && (
+              <a
+                href={`/composer?edit=${post.id}`}
+                className="inline-flex items-center justify-center font-medium rounded-lg px-3 py-1.5 text-sm"
+                style={{ backgroundColor: 'transparent', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+              >
+                Edit
+              </a>
+            )}
+            {(post.status === 'draft' || post.status === 'scheduled' || post.status === 'failed' || post.status === 'partial') && (
               <Button size="sm" disabled={busy === post.id} onClick={() => void publishNow(post.id)}>
                 <Send size={12} className="mr-1" /> Publish now
               </Button>

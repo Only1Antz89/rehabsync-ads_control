@@ -1,8 +1,13 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { Monitor, Smartphone } from 'lucide-react';
 import { Badge, Button, Card, Input } from '@/components/ui';
 import type { BadgeVariant } from '@/components/ui';
+import { RichTextEditor } from '@/components/RichTextEditor';
+
+const DEFAULT_HTML =
+  '<p>Hi {{first_name}},</p>\n<p>…</p>\n<p style="font-size:12px;color:#64748b"><a href="{{unsubscribe_url}}">Unsubscribe</a></p>';
 
 interface NewsletterRow {
   id: string;
@@ -38,11 +43,28 @@ export function NewslettersManager({ isAdmin }: { isAdmin: boolean }) {
   // Composer state
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
-  const [html, setHtml] = useState(
-    '<p>Hi {{first_name}},</p>\n<p>…</p>\n<p style="font-size:12px;color:#64748b"><a href="{{unsubscribe_url}}">Unsubscribe</a></p>',
-  );
+  const [html, setHtml] = useState(DEFAULT_HTML);
   const [tagsCsv, setTagsCsv] = useState('');
   const [audience, setAudience] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Live rendered preview (uses the real send renderer via /api/newsletters/render)
+  const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
+  const [previewWidth, setPreviewWidth] = useState<'desktop' | 'mobile'>('desktop');
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetch('/api/newsletters/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject, html }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((d: { subject: string; html: string } | null) => setPreview(d))
+        .catch(() => setPreview(null));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [subject, html]);
 
   const load = useCallback(() => {
     fetch('/api/newsletters')
@@ -74,24 +96,50 @@ export function NewslettersManager({ isAdmin }: { isAdmin: boolean }) {
     return () => clearTimeout(t);
   }, [segment]);
 
-  async function create(e: React.FormEvent) {
+  function resetForm() {
+    setEditingId(null);
+    setName('');
+    setSubject('');
+    setHtml(DEFAULT_HTML);
+    setTagsCsv('');
+  }
+
+  async function startEdit(id: string) {
+    setError(null);
+    setNotice(null);
+    const res = await fetch(`/api/newsletters/${id}`);
+    if (!res.ok) {
+      setError('Could not load that draft.');
+      return;
+    }
+    const d = (await res.json()) as {
+      newsletter: { id: string; name: string; subject: string; html: string; segment: { tags?: string[] } };
+    };
+    setEditingId(d.newsletter.id);
+    setName(d.newsletter.name);
+    setSubject(d.newsletter.subject);
+    setHtml(d.newsletter.html ?? '');
+    setTagsCsv((d.newsletter.segment?.tags ?? []).join(', '));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy('create');
     setError(null);
     try {
-      const res = await fetch('/api/newsletters', {
-        method: 'POST',
+      const res = await fetch(editingId ? `/api/newsletters/${editingId}` : '/api/newsletters', {
+        method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, subject, html, segment: segment() }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(data?.error ?? 'Create failed.');
+        setError(data?.error ?? 'Save failed.');
         return;
       }
-      setName('');
-      setSubject('');
-      setTagsCsv('');
+      setNotice(editingId ? 'Draft updated.' : 'Draft created.');
+      resetForm();
       load();
     } finally {
       setBusy(null);
@@ -154,41 +202,85 @@ export function NewslettersManager({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div className="space-y-5">
-      <Card
-        title="New issue"
-        description="Merge tags: {{name}}, {{first_name}}, {{email}}, {{unsubscribe_url}}. A compliance footer with unsubscribe is added automatically if you leave {{unsubscribe_url}} out."
-      >
-        <form onSubmit={create} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input label="Internal name" value={name} onChange={(e) => setName(e.target.value)} placeholder="July 2026 issue" required />
-            <Input label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What's new in RehabSync" required />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+        <Card
+          title={editingId ? 'Edit draft' : 'New issue'}
+          description="Merge tags: {{name}}, {{first_name}}, {{email}}, {{unsubscribe_url}}. A compliance footer with unsubscribe is added automatically if you leave {{unsubscribe_url}} out."
+        >
+          <form onSubmit={save} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label="Internal name" value={name} onChange={(e) => setName(e.target.value)} placeholder="July 2026 issue" required />
+              <Input label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What's new in RehabSync" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                Body
+              </label>
+              <RichTextEditor value={html} onChange={setHtml} />
+            </div>
+            <Input
+              label="Audience tags (comma separated, empty = all active subscribers)"
+              value={tagsCsv}
+              onChange={(e) => setTagsCsv(e.target.value)}
+              placeholder="clinics, north"
+            />
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Audience: <strong style={{ color: 'var(--text-primary)' }}>{audience ?? '…'}</strong> active subscriber{audience === 1 ? '' : 's'} after suppressions.
+            </p>
+            {error && <p className="text-sm" style={{ color: 'var(--color-error-text)' }}>{error}</p>}
+            {notice && <p className="text-sm" style={{ color: 'var(--color-success-text)' }}>{notice}</p>}
+            <div className="flex items-center gap-2">
+              <Button type="submit" loading={busy === 'create'}>{editingId ? 'Save changes' : 'Create draft'}</Button>
+              {editingId && (
+                <Button type="button" variant="ghost" onClick={resetForm}>
+                  Cancel edit
+                </Button>
+              )}
+            </div>
+          </form>
+        </Card>
+
+        <Card
+          title="Preview"
+          description="Rendered exactly as recipients will see it — sample subscriber, merge tags and compliance footer applied."
+        >
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm min-w-0 truncate pr-2" style={{ color: 'var(--text-primary)' }}>
+              <span className="text-xs uppercase tracking-wide mr-2" style={{ color: 'var(--text-muted)' }}>Subject</span>
+              <strong>{preview?.subject || '—'}</strong>
+            </p>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPreviewWidth('desktop')}
+                title="Desktop width"
+                className="p-1.5 rounded"
+                style={{ color: previewWidth === 'desktop' ? 'var(--brand-primary)' : 'var(--text-muted)' }}
+              >
+                <Monitor size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewWidth('mobile')}
+                title="Mobile width"
+                className="p-1.5 rounded"
+                style={{ color: previewWidth === 'mobile' ? 'var(--brand-primary)' : 'var(--text-muted)' }}
+              >
+                <Smartphone size={15} />
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
-              HTML body
-            </label>
-            <textarea
-              value={html}
-              onChange={(e) => setHtml(e.target.value)}
-              rows={8}
-              className="w-full rounded-lg border px-3 py-2 text-sm font-mono"
-              style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+          <div className="flex justify-center rounded-lg border p-3 overflow-x-auto" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
+            <iframe
+              title="Newsletter preview"
+              sandbox=""
+              srcDoc={preview?.html ?? '<p style="font-family:sans-serif;color:#64748b;padding:16px">Start typing to see the preview…</p>'}
+              className="rounded-md border-0 bg-white"
+              style={{ width: previewWidth === 'desktop' ? 640 : 375, maxWidth: '100%', height: 460 }}
             />
           </div>
-          <Input
-            label="Audience tags (comma separated, empty = all active subscribers)"
-            value={tagsCsv}
-            onChange={(e) => setTagsCsv(e.target.value)}
-            placeholder="clinics, north"
-          />
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Audience: <strong style={{ color: 'var(--text-primary)' }}>{audience ?? '…'}</strong> active subscriber{audience === 1 ? '' : 's'} after suppressions.
-          </p>
-          {error && <p className="text-sm" style={{ color: 'var(--color-error-text)' }}>{error}</p>}
-          {notice && <p className="text-sm" style={{ color: 'var(--color-success-text)' }}>{notice}</p>}
-          <Button type="submit" loading={busy === 'create'}>Create draft</Button>
-        </form>
-      </Card>
+        </Card>
+      </div>
 
       <Card title="Issues">
         {issues === null ? (
@@ -214,6 +306,11 @@ export function NewslettersManager({ isAdmin }: { isAdmin: boolean }) {
                 </button>
                 <div className="flex items-center gap-2">
                   <Badge variant={statusVariant(issue.status)}>{issue.status}</Badge>
+                  {issue.status === 'draft' && (
+                    <Button size="sm" variant="secondary" disabled={busy === issue.id} onClick={() => void startEdit(issue.id)}>
+                      Edit
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" disabled={busy === issue.id} onClick={() => void testSend(issue.id)}>
                     Test
                   </Button>
