@@ -74,6 +74,7 @@ export function Composer({ editId = null }: { editId?: string | null }) {
   const [aiTopic, setAiTopic] = useState('');
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [snippets, setSnippets] = useState<{ id: string; title: string; body: string }[]>([]);
   const imageFileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
 
@@ -123,6 +124,10 @@ export function Composer({ editId = null }: { editId?: string | null }) {
     fetch('/api/queue/slots')
       .then((res) => (res.ok ? res.json() : { next: null }))
       .then((d: { next: string | null }) => setNextSlot(d.next))
+      .catch(() => undefined);
+    fetch('/api/content')
+      .then((res) => (res.ok ? res.json() : { snippets: [] }))
+      .then((d: { snippets: { id: string; title: string; body: string }[] }) => setSnippets(d.snippets))
       .catch(() => undefined);
     loadLibrary();
   }, []);
@@ -363,6 +368,22 @@ export function Composer({ editId = null }: { editId?: string | null }) {
               </Button>
             </div>
             {aiError && <p className="text-xs" style={{ color: 'var(--color-error-text)' }}>{aiError}</p>}
+            {snippets.length > 0 && (
+              <select
+                value=""
+                onChange={(e) => {
+                  const s = snippets.find((x) => x.id === e.target.value);
+                  if (s) setBody((b) => (b ? `${b}\n\n${s.body}` : s.body));
+                }}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+              >
+                <option value="">Insert a saved snippet…</option>
+                {snippets.map((s) => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <Input label="Link (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://rehabsync.app/…" />

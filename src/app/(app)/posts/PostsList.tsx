@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Copy, ExternalLink, Send, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Copy, ExternalLink, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { Badge, Button, Card } from '@/components/ui';
 import type { BadgeVariant } from '@/components/ui';
 import { PLATFORM_RULES } from '@/lib/social/validate';
@@ -47,10 +48,27 @@ function targetVariant(status: string): BadgeVariant {
 }
 
 export function PostsList() {
+  const router = useRouter();
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  async function recycle(id: string) {
+    setBusy(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/posts/${id}/recycle`, { method: 'POST' });
+      const d = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+      if (!res.ok || !d?.id) {
+        setError(d?.error ?? 'Could not recycle this post.');
+        return;
+      }
+      router.push(`/composer?edit=${d.id}`);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const load = useCallback(() => {
     fetch('/api/posts')
@@ -213,6 +231,9 @@ export function PostsList() {
                 <Trash2 size={12} className="mr-1" /> Delete
               </Button>
             )}
+            <Button size="sm" variant="ghost" disabled={busy === post.id} onClick={() => void recycle(post.id)}>
+              <RefreshCw size={12} className="mr-1" /> Recycle
+            </Button>
           </div>
         </Card>
       ))}

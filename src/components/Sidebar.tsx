@@ -9,6 +9,7 @@ import {
   PenSquare,
   CalendarDays,
   ListChecks,
+  Library,
   Inbox,
   MessageSquare,
   Radar,
@@ -33,6 +34,7 @@ const ICONS = {
   composer: PenSquare,
   calendar: CalendarDays,
   posts: ListChecks,
+  content: Library,
   inbox: Inbox,
   inboxInsights: MessageSquare,
   listening: Radar,
@@ -68,6 +70,7 @@ function buildNav(isAdmin: boolean): NavGroup[] {
         { label: 'Composer', href: '/composer', icon: 'composer' },
         { label: 'Calendar', href: '/calendar', icon: 'calendar' },
         { label: 'Posts', href: '/posts', icon: 'posts' },
+        { label: 'Content library', href: '/content', icon: 'content' },
       ],
     },
     {

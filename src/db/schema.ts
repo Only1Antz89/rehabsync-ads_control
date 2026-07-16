@@ -155,6 +155,21 @@ export const adsPostTargets = pgTable(
   ],
 );
 
+// ── Content library: reusable caption snippets, insertable in the composer. ──
+export const adsContentSnippets = pgTable(
+  'ads_content_snippets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: varchar('title', { length: 160 }).notNull(),
+    body: text('body').notNull(),
+    tags: jsonb('tags').$type<string[]>().default([]).notNull(),
+    createdBy: varchar('created_by', { length: 255 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [index('ads_content_snippets_created_idx').on(table.createdAt)],
+);
+
 // ── Scheduling queue (P2): weekly posting slots; "add to queue" fills the next free one. ──
 export const adsPostingSlots = pgTable(
   'ads_posting_slots',
