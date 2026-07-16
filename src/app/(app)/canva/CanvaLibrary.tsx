@@ -37,6 +37,9 @@ export function CanvaLibrary({ admin }: { admin: boolean }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ContentItem | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [prepared, setPrepared] = useState<{ url: string; reused: boolean } | null>(null);
+  const [prepError, setPrepError] = useState<string | null>(null);
 
   const load = useCallback((which: Tab) => {
     setItems(null);
@@ -71,6 +74,29 @@ export function CanvaLibrary({ admin }: { admin: boolean }) {
       load(tab);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function openPreview(item: ContentItem) {
+    setPreview(item);
+    setPrepared(null);
+    setPrepError(null);
+  }
+
+  async function prepare(item: ContentItem) {
+    setPreparing(true);
+    setPrepError(null);
+    setPrepared(null);
+    try {
+      const res = await fetch(`/api/integrations/canva/content/${item.id}/prepare`, { method: 'POST' });
+      const d = (await res.json().catch(() => null)) as { url?: string; reused?: boolean; error?: string } | null;
+      if (!res.ok || !d?.url) {
+        setPrepError(d?.error ?? 'Could not export this design from Canva.');
+        return;
+      }
+      setPrepared({ url: d.url, reused: Boolean(d.reused) });
+    } finally {
+      setPreparing(false);
     }
   }
 
@@ -119,7 +145,7 @@ export function CanvaLibrary({ admin }: { admin: boolean }) {
             <button
               key={item.id}
               type="button"
-              onClick={() => setPreview(item)}
+              onClick={() => openPreview(item)}
               className="text-left rounded-xl border overflow-hidden transition-all hover:shadow-md cursor-pointer"
               style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-card)' }}
             >
@@ -175,6 +201,34 @@ export function CanvaLibrary({ admin }: { admin: boolean }) {
             </div>
             <div className="p-5">
               <CanvaPreviewGrid thumbnailUrl={preview.thumbnailUrl} title={preview.title ?? ''} />
+            </div>
+            <div className="flex items-center justify-between gap-3 flex-wrap px-5 py-4 border-t" style={{ borderColor: 'var(--border-secondary)' }}>
+              <div className="min-w-0">
+                {prepError && <p className="text-sm" style={{ color: 'var(--color-error-text)' }}>{prepError}</p>}
+                {prepared ? (
+                  <p className="text-sm" style={{ color: 'var(--color-success-text)' }}>
+                    {prepared.reused ? 'Already exported — ' : 'Exported and saved to your media library. '}
+                    Ready to drop into a post.
+                  </p>
+                ) : (
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Export renders this design and saves it to your media library so you can attach it to a post.
+                  </p>
+                )}
+              </div>
+              {prepared ? (
+                <a
+                  href={`/composer?image=${encodeURIComponent(prepared.url)}`}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg shrink-0"
+                  style={{ backgroundColor: 'var(--brand-primary)', color: '#fff' }}
+                >
+                  Open in composer →
+                </a>
+              ) : (
+                <Button loading={preparing} onClick={() => prepare(preview)} className="shrink-0">
+                  Prepare for composer
+                </Button>
+              )}
             </div>
           </div>
         </div>

@@ -47,7 +47,7 @@ interface MediaAsset {
 
 const MANUAL_CHOICES: SocialPlatform[] = ['linkedin', 'x', 'tiktok', 'youtube'];
 
-export function Composer({ editId = null }: { editId?: string | null }) {
+export function Composer({ editId = null, initialImage = null }: { editId?: string | null; initialImage?: string | null }) {
   const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>([]);
   // Edit mode: targets are fixed on an existing post; we load content + overrides into the form.
@@ -136,6 +136,13 @@ export function Composer({ editId = null }: { editId?: string | null }) {
       .catch(() => undefined);
     loadLibrary();
   }, []);
+
+  // Prefill an image handed off from the Canva library ("Prepare for composer"). Create mode only.
+  useEffect(() => {
+    if (editId || !initialImage) return;
+    const u = initialImage.trim();
+    if (u) setImages((prev) => (prev.includes(u) ? prev : [...prev, u]));
+  }, [editId, initialImage]);
 
   const setOverride = (key: string, value: string) => setOverrides((prev) => ({ ...prev, [key]: value }));
 

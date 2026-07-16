@@ -523,6 +523,33 @@ export const canvaContentItems = pgTable(
   ],
 );
 
+/** One "prepare for composer" export run — links a synced design to the stored ads_media asset. */
+export const canvaExports = pgTable(
+  'canva_exports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    canvaContentItemId: uuid('canva_content_item_id').references(() => canvaContentItems.id, { onDelete: 'set null' }),
+    canvaDesignId: varchar('canva_design_id', { length: 200 }).notNull(),
+    jobId: varchar('job_id', { length: 200 }),
+    format: varchar('format', { length: 10 }).notNull().default('png'),
+    status: varchar('status', { length: 12 }).notNull().default('pending'),
+    mediaId: uuid('media_id').references(() => adsMedia.id, { onDelete: 'set null' }),
+    checksum: varchar('checksum', { length: 64 }),
+    sizeBytes: integer('size_bytes'),
+    reused: boolean('reused').notNull().default(false),
+    error: text('error'),
+    requestedBy: varchar('requested_by', { length: 255 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    completedAt: timestamp('completed_at'),
+  },
+  (table) => [
+    index('canva_exports_design_idx').on(table.canvaDesignId),
+    index('canva_exports_checksum_idx').on(table.checksum),
+    index('canva_exports_item_idx').on(table.canvaContentItemId),
+  ],
+);
+
 // ── Competitor tracking / share-of-voice: brand term-sets matched against listening mentions. ──
 export const adsCompetitors = pgTable(
   'ads_competitors',

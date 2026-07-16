@@ -71,3 +71,24 @@ export async function createSignedUpload(path: string): Promise<SignedUpload> {
     path,
   };
 }
+
+/**
+ * Server-side upload: sign an upload URL then PUT the bytes straight to storage. Used when the
+ * server itself has the file (e.g. an asset rendered by Canva that we download and persist), rather
+ * than the browser. Returns the public URL the object is served from.
+ */
+export async function uploadServerObject(path: string, bytes: Uint8Array, contentType: string): Promise<string> {
+  const signed = await createSignedUpload(path);
+  const res = await fetch(signed.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType, 'x-upsert': 'true' },
+    body: bytes as unknown as BodyInit,
+    cache: 'no-store',
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => '');
+    throw new Error(`Storage upload failed: HTTP ${res.status} ${msg.slice(0, 200)}`);
+  }
+  return signed.publicUrl;
+}

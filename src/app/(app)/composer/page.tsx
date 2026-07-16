@@ -5,9 +5,9 @@ export const dynamic = 'force-dynamic';
 export default async function ComposerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string }>;
+  searchParams: Promise<{ edit?: string; image?: string }>;
 }) {
-  const { edit } = await searchParams;
+  const { edit, image } = await searchParams;
   return (
     <div className="space-y-4">
       <div>
@@ -20,7 +20,7 @@ export default async function ComposerPage({
             : 'Compose once, publish to every selected platform — validation runs per platform as you type.'}
         </p>
       </div>
-      <Composer editId={edit ?? null} />
+      <Composer editId={edit ?? null} initialImage={image ?? null} />
     </div>
   );
 }
