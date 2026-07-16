@@ -496,6 +496,33 @@ export const canvaSettings = pgTable('canva_settings', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+/** Workflow stages, ordered least → furthest along. A design's `stage` is the furthest it sits in. */
+export const CANVA_STAGES = ['drafts', 'ready', 'published'] as const;
+export type CanvaStage = (typeof CANVA_STAGES)[number];
+
+/** One row per Canva design discovered in a mapped folder. Synced (upserted) from Canva. */
+export const canvaContentItems = pgTable(
+  'canva_content_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    canvaDesignId: varchar('canva_design_id', { length: 200 }).notNull(),
+    stage: varchar('stage', { length: 12 }).$type<CanvaStage>().notNull(),
+    stages: jsonb('stages').$type<CanvaStage[]>().default([]).notNull(),
+    title: varchar('title', { length: 500 }),
+    thumbnailUrl: text('thumbnail_url'),
+    editUrl: text('edit_url'),
+    status: varchar('status', { length: 12 }).notNull().default('active'),
+    canvaUpdatedAt: timestamp('canva_updated_at'),
+    lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('canva_content_items_design_idx').on(table.canvaDesignId),
+    index('canva_content_items_stage_idx').on(table.stage, table.status),
+  ],
+);
+
 // ── Competitor tracking / share-of-voice: brand term-sets matched against listening mentions. ──
 export const adsCompetitors = pgTable(
   'ads_competitors',

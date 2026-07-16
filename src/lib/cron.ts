@@ -4,6 +4,7 @@ import { publishDuePosts } from './publisher';
 import { processNewsletters } from './newsletters';
 import { syncMetrics } from './metrics';
 import { syncIngestion } from './ingestion';
+import { syncCanvaContent } from './canva/sync';
 
 export interface CronJobMeta {
   key: string;
@@ -17,6 +18,7 @@ export const CRON_JOBS: CronJobMeta[] = [
   { key: 'newsletters', label: 'Send newsletters', description: 'Send the next batch of due newsletter emails.' },
   { key: 'metrics', label: 'Sync metrics', description: 'Snapshot engagement + follower counts from connected networks (heaviest job).' },
   { key: 'ingest', label: 'Ingest comments', description: 'Pull new audience comments from connected networks into the inbox.' },
+  { key: 'canva-sync', label: 'Sync Canva designs', description: 'Refresh the design library from the mapped Canva Drafts / Ready / Published folders.' },
 ];
 
 const RUNNERS: Record<string, () => Promise<Record<string, unknown>>> = {
@@ -24,6 +26,7 @@ const RUNNERS: Record<string, () => Promise<Record<string, unknown>>> = {
   newsletters: async () => processNewsletters(),
   metrics: async () => syncMetrics(),
   ingest: async () => syncIngestion(),
+  'canva-sync': async () => ({ ...(await syncCanvaContent()) }),
 };
 
 export function isKnownJob(key: string): key is string {

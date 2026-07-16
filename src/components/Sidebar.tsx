@@ -79,6 +79,7 @@ function buildNav(isAdmin: boolean): NavGroup[] {
         { label: 'Calendar', href: '/calendar', icon: 'calendar' },
         { label: 'Posts', href: '/posts', icon: 'posts' },
         { label: 'Content library', href: '/content', icon: 'content' },
+        { label: 'Canva designs', href: '/canva', icon: 'canva' },
       ],
     },
     {
