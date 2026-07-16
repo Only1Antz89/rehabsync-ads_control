@@ -20,6 +20,7 @@ import {
   Settings,
   Plug,
   Network,
+  Shapes,
   CheckSquare,
   SlidersHorizontal,
   Timer,
@@ -47,6 +48,7 @@ const ICONS = {
   subscribers: Users,
   connections: Plug,
   networks: Network,
+  canva: Shapes,
   admin: Settings,
   approvals: CheckSquare,
   settings: SlidersHorizontal,
@@ -102,6 +104,7 @@ function buildNav(isAdmin: boolean): NavGroup[] {
       groupName: 'Administration',
       items: [
         { label: 'Connections', href: '/admin/connections', icon: 'connections' },
+        { label: 'Canva', href: '/admin/canva', icon: 'canva' },
         { label: 'Networks', href: '/admin/networks', icon: 'networks' },
         { label: 'Approvals', href: '/admin/approvals', icon: 'approvals' },
         { label: 'Users', href: '/admin/users', icon: 'admin' },

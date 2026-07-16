@@ -468,6 +468,34 @@ export const adsListeningMentions = pgTable(
   ],
 );
 
+// ── Canva Connect integration: connection + folder mapping (singletons, id=1). ──
+export const canvaConnections = pgTable('canva_connections', {
+  id: integer('id').primaryKey().default(1),
+  canvaUserId: varchar('canva_user_id', { length: 200 }),
+  accessTokenEnc: text('access_token_enc'),
+  refreshTokenEnc: text('refresh_token_enc'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at'),
+  scopes: jsonb('scopes').$type<string[]>().default([]).notNull(),
+  status: varchar('status', { length: 30 }).notNull().default('disconnected'),
+  lastError: text('last_error'),
+  connectedBy: varchar('connected_by', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const canvaSettings = pgTable('canva_settings', {
+  id: integer('id').primaryKey().default(1),
+  draftsFolderId: varchar('drafts_folder_id', { length: 200 }),
+  draftsFolderName: varchar('drafts_folder_name', { length: 300 }),
+  readyFolderId: varchar('ready_folder_id', { length: 200 }),
+  readyFolderName: varchar('ready_folder_name', { length: 300 }),
+  publishedFolderId: varchar('published_folder_id', { length: 200 }),
+  publishedFolderName: varchar('published_folder_name', { length: 300 }),
+  lastValidatedAt: timestamp('last_validated_at'),
+  updatedBy: varchar('updated_by', { length: 255 }),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // ── Competitor tracking / share-of-voice: brand term-sets matched against listening mentions. ──
 export const adsCompetitors = pgTable(
   'ads_competitors',
