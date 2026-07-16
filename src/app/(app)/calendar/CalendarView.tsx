@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge, Card } from '@/components/ui';
 import type { BadgeVariant } from '@/components/ui';
@@ -27,18 +27,41 @@ function dayKey(d: Date): string {
 }
 
 export function CalendarView() {
+  const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [dragId, setDragId] = useState<string | null>(null);
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
 
-  useEffect(() => {
+  const load = () =>
     fetch('/api/posts')
       .then((res) => (res.ok ? res.json() : { posts: [] }))
       .then((d: { posts: Post[] }) => setPosts(d.posts))
       .catch(() => setPosts([]));
+
+  useEffect(() => {
+    load();
   }, []);
+
+  /** Drop a scheduled post onto a day: keep its time-of-day, move it to that date. */
+  async function reschedule(postId: string, day: Date) {
+    const post = posts.find((p) => p.id === postId);
+    if (!post || post.status !== 'scheduled') return;
+    const prev = post.scheduledAt ? new Date(post.scheduledAt) : null;
+    const target = new Date(day);
+    target.setHours(prev ? prev.getHours() : 9, prev ? prev.getMinutes() : 0, 0, 0);
+    if (prev && dayKey(prev) === dayKey(target)) return; // same day — no-op
+    const iso = target.toISOString();
+    setPosts((ps) => ps.map((p) => (p.id === postId ? { ...p, scheduledAt: iso } : p))); // optimistic
+    await fetch(`/api/posts/${postId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledAt: iso }),
+    }).catch(() => undefined);
+    load();
+  }
 
   const byDay = useMemo(() => {
     const map = new Map<string, Post[]>();
@@ -96,8 +119,19 @@ export function CalendarView() {
           return (
             <div
               key={key}
+              onDragOver={(e) => {
+                if (dragId) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragId) void reschedule(dragId, day);
+                setDragId(null);
+              }}
               className="min-h-20 p-1.5"
-              style={{ backgroundColor: 'var(--bg-card)', opacity: inMonth ? 1 : 0.45 }}
+              style={{
+                backgroundColor: dragId ? 'var(--bg-secondary)' : 'var(--bg-card)',
+                opacity: inMonth ? 1 : 0.45,
+              }}
             >
               <p
                 className="text-xs mb-1 font-medium"
@@ -106,18 +140,28 @@ export function CalendarView() {
                 {day.getDate()}
               </p>
               <div className="space-y-1">
-                {dayPosts.slice(0, 3).map((post) => (
-                  <Link key={post.id} href="/posts" className="block">
-                    <span
-                      className="block truncate rounded px-1.5 py-0.5 text-[11px]"
+                {dayPosts.slice(0, 3).map((post) => {
+                  const draggable = post.status === 'scheduled';
+                  return (
+                    <div
+                      key={post.id}
+                      draggable={draggable}
+                      onDragStart={(e) => {
+                        setDragId(post.id);
+                        e.dataTransfer.setData('text/plain', post.id);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragEnd={() => setDragId(null)}
+                      onClick={() => router.push('/posts')}
+                      title={draggable ? `${post.body}\n\nDrag to another day to reschedule` : post.body}
+                      className={`block truncate rounded px-1.5 py-0.5 text-[11px] ${draggable ? 'cursor-grab' : 'cursor-pointer'}`}
                       style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
-                      title={post.body}
                     >
                       <Badge variant={variant(post.status)}>{post.targets.length}</Badge>{' '}
                       {post.body.slice(0, 18) || '(no text)'}
-                    </span>
-                  </Link>
-                ))}
+                    </div>
+                  );
+                })}
                 {dayPosts.length > 3 && (
                   <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>+{dayPosts.length - 3} more</p>
                 )}
