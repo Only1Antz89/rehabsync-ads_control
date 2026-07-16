@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isResponse, requireSession } from '@/lib/route-auth';
 import { craftCaption } from '@/lib/ai';
 import type { CaptionMode } from '@/lib/ai';
+import { getBrandKit } from '@/lib/brand';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -25,7 +26,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Provide the caption text to work from.' }, { status: 400 });
   }
 
-  const result = await craftCaption({ mode, platform: body?.platform, topic: body?.topic, text: body?.text });
+  const brand = await getBrandKit().catch(() => null);
+  const result = await craftCaption({
+    mode,
+    platform: body?.platform,
+    topic: body?.topic,
+    text: body?.text,
+    voice: brand?.voice ?? undefined,
+  });
   if (result.source === 'unavailable') {
     return NextResponse.json(
       { error: result.error ?? 'AI is not configured — set REHABSYNC_AI_URL and REHABSYNC_AI_API_KEY.' },

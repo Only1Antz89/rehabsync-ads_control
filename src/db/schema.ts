@@ -170,6 +170,19 @@ export const adsContentSnippets = pgTable(
   (table) => [index('ads_content_snippets_created_idx').on(table.createdAt)],
 );
 
+// ── Brand kit: single-row brand voice / colours / logo / default hashtags / boilerplate. ──
+export const adsBrandKit = pgTable('ads_brand_kit', {
+  id: integer('id').primaryKey().default(1),
+  primaryColor: varchar('primary_color', { length: 9 }),
+  secondaryColor: varchar('secondary_color', { length: 9 }),
+  logoUrl: text('logo_url'),
+  voice: text('voice'),
+  hashtags: jsonb('hashtags').$type<string[]>().default([]).notNull(),
+  boilerplate: text('boilerplate'),
+  updatedBy: varchar('updated_by', { length: 255 }),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // ── Scheduling queue (P2): weekly posting slots; "add to queue" fills the next free one. ──
 export const adsPostingSlots = pgTable(
   'ads_posting_slots',

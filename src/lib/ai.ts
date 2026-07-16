@@ -54,6 +54,7 @@ export interface CaptionRequest {
   platform?: string;
   topic?: string;
   text?: string;
+  voice?: string;
 }
 
 /**
@@ -62,10 +63,12 @@ export interface CaptionRequest {
  */
 export async function craftCaption(req: CaptionRequest): Promise<ReplySuggestion> {
   const forPlatform = req.platform ? ` for ${req.platform}` : '';
+  const voiceLine = req.voice?.trim() ? ` Match this brand voice: ${req.voice.trim().slice(0, 600)}.` : '';
   const system =
     'You are a social-media manager for a physiotherapy technology platform. Write engaging, on-brand ' +
     'captions. Never give medical advice, diagnoses, or treatment instructions. Return only the caption ' +
-    'text — no preamble, no surrounding quotes.';
+    'text — no preamble, no surrounding quotes.' +
+    voiceLine;
   let user: string;
   switch (req.mode) {
     case 'draft':

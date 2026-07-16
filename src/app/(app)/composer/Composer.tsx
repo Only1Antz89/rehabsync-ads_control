@@ -75,6 +75,7 @@ export function Composer({ editId = null }: { editId?: string | null }) {
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [snippets, setSnippets] = useState<{ id: string; title: string; body: string }[]>([]);
+  const [brandHashtags, setBrandHashtags] = useState<string[]>([]);
   const imageFileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
 
@@ -128,6 +129,10 @@ export function Composer({ editId = null }: { editId?: string | null }) {
     fetch('/api/content')
       .then((res) => (res.ok ? res.json() : { snippets: [] }))
       .then((d: { snippets: { id: string; title: string; body: string }[] }) => setSnippets(d.snippets))
+      .catch(() => undefined);
+    fetch('/api/admin/brand')
+      .then((res) => (res.ok ? res.json() : { brand: null }))
+      .then((d: { brand: { hashtags?: string[] } | null }) => setBrandHashtags(d.brand?.hashtags ?? []))
       .catch(() => undefined);
     loadLibrary();
   }, []);
@@ -366,6 +371,16 @@ export function Composer({ editId = null }: { editId?: string | null }) {
               <Button type="button" size="sm" variant="secondary" loading={aiBusy === 'hashtags'} disabled={!body.trim()} onClick={() => void runAi('hashtags')}>
                 Add hashtags
               </Button>
+              {brandHashtags.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setBody((b) => `${b}${b.trim() ? '\n\n' : ''}${brandHashtags.join(' ')}`)}
+                >
+                  Brand hashtags
+                </Button>
+              )}
             </div>
             {aiError && <p className="text-xs" style={{ color: 'var(--color-error-text)' }}>{aiError}</p>}
             {snippets.length > 0 && (
