@@ -19,6 +19,7 @@ import {
   Users,
   Settings,
   Plug,
+  Network,
   CheckSquare,
   SlidersHorizontal,
   Timer,
@@ -45,6 +46,7 @@ const ICONS = {
   newsletters: Mail,
   subscribers: Users,
   connections: Plug,
+  networks: Network,
   admin: Settings,
   approvals: CheckSquare,
   settings: SlidersHorizontal,
@@ -100,6 +102,7 @@ function buildNav(isAdmin: boolean): NavGroup[] {
       groupName: 'Administration',
       items: [
         { label: 'Connections', href: '/admin/connections', icon: 'connections' },
+        { label: 'Networks', href: '/admin/networks', icon: 'networks' },
         { label: 'Approvals', href: '/admin/approvals', icon: 'approvals' },
         { label: 'Users', href: '/admin/users', icon: 'admin' },
         { label: 'Settings', href: '/admin/settings', icon: 'settings' },

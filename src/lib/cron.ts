@@ -3,6 +3,7 @@ import { adsCronJobs, getDb } from '@/db';
 import { publishDuePosts } from './publisher';
 import { processNewsletters } from './newsletters';
 import { syncMetrics } from './metrics';
+import { syncIngestion } from './ingestion';
 
 export interface CronJobMeta {
   key: string;
@@ -15,12 +16,14 @@ export const CRON_JOBS: CronJobMeta[] = [
   { key: 'publish', label: 'Publish scheduled posts', description: 'Publish social posts whose scheduled time has arrived.' },
   { key: 'newsletters', label: 'Send newsletters', description: 'Send the next batch of due newsletter emails.' },
   { key: 'metrics', label: 'Sync metrics', description: 'Snapshot engagement + follower counts from connected networks (heaviest job).' },
+  { key: 'ingest', label: 'Ingest comments', description: 'Pull new audience comments from connected networks into the inbox.' },
 ];
 
 const RUNNERS: Record<string, () => Promise<Record<string, unknown>>> = {
   publish: async () => publishDuePosts(),
   newsletters: async () => processNewsletters(),
   metrics: async () => syncMetrics(),
+  ingest: async () => syncIngestion(),
 };
 
 export function isKnownJob(key: string): key is string {
