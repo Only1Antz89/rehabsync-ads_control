@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Sparkles } from 'lucide-react';
 import { Badge, Button, Card, Input } from '@/components/ui';
 import { PLATFORM_RULES, validateForPlatform } from '@/lib/social/validate';
 import type { SocialPlatform } from '@/db/schema';
@@ -69,6 +70,10 @@ export function Composer({ editId = null }: { editId?: string | null }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [uploading, setUploading] = useState<'image' | 'video' | null>(null);
+  // AI caption assist
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const imageFileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
 
@@ -198,6 +203,30 @@ export function Composer({ editId = null }: { editId?: string | null }) {
     update(next);
   }
 
+  /** AI caption assist: draft from a topic, or improve/shorten/hashtag the current caption. */
+  async function runAi(mode: 'draft' | 'improve' | 'shorten' | 'hashtags') {
+    setAiBusy(mode);
+    setAiError(null);
+    try {
+      const res = await fetch('/api/ai/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, topic: aiTopic, text: body }),
+      });
+      const d = (await res.json().catch(() => null)) as { suggestion?: string; error?: string } | null;
+      if (!res.ok) {
+        setAiError(d?.error ?? 'AI request failed.');
+        return;
+      }
+      const suggestion = (d?.suggestion ?? '').trim();
+      if (!suggestion) return;
+      if (mode === 'hashtags') setBody((b) => (b ? `${b}\n\n${suggestion}` : suggestion));
+      else setBody(suggestion);
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
   /** Edit mode: PATCH content/media/overrides/schedule; optionally publish after saving. */
   async function submitEdit(mode: 'draft' | 'schedule' | 'now') {
     if (!editId) return;
@@ -303,6 +332,39 @@ export function Composer({ editId = null }: { editId?: string | null }) {
             style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
           />
           <p className="text-xs text-right" style={{ color: 'var(--text-muted)' }}>{body.length} characters</p>
+
+          {/* AI caption assist — drafts/refines text the human still edits before publishing. */}
+          <div className="rounded-lg border p-2.5 space-y-2" style={{ borderColor: 'var(--border-primary)' }}>
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={14} style={{ color: 'var(--brand-primary)' }} />
+              <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>AI assist</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={aiTopic}
+                onChange={(e) => setAiTopic(e.target.value)}
+                placeholder="Topic for a fresh caption…"
+                className="flex-1 rounded-lg border px-3 py-2 text-sm"
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+              />
+              <Button type="button" size="sm" loading={aiBusy === 'draft'} disabled={!aiTopic.trim()} onClick={() => void runAi('draft')}>
+                Draft
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="secondary" loading={aiBusy === 'improve'} disabled={!body.trim()} onClick={() => void runAi('improve')}>
+                Improve
+              </Button>
+              <Button type="button" size="sm" variant="secondary" loading={aiBusy === 'shorten'} disabled={!body.trim()} onClick={() => void runAi('shorten')}>
+                Shorten
+              </Button>
+              <Button type="button" size="sm" variant="secondary" loading={aiBusy === 'hashtags'} disabled={!body.trim()} onClick={() => void runAi('hashtags')}>
+                Add hashtags
+              </Button>
+            </div>
+            {aiError && <p className="text-xs" style={{ color: 'var(--color-error-text)' }}>{aiError}</p>}
+          </div>
+
           <Input label="Link (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://rehabsync.app/…" />
           {/* Images (carousel-ready — the first is primary; API publishing uses the primary today) */}
           <div>
