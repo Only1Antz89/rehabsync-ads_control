@@ -2,11 +2,12 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Copy, ExternalLink, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, MessageSquare, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { Badge, Button, Card } from '@/components/ui';
 import type { BadgeVariant } from '@/components/ui';
 import { PLATFORM_RULES } from '@/lib/social/validate';
 import type { SocialPlatform } from '@/db/schema';
+import { PostComments } from './PostComments';
 
 interface Target {
   id: string;
@@ -53,6 +54,7 @@ export function PostsList() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [openComments, setOpenComments] = useState<string | null>(null);
 
   async function recycle(id: string) {
     setBusy(id);
@@ -234,7 +236,16 @@ export function PostsList() {
             <Button size="sm" variant="ghost" disabled={busy === post.id} onClick={() => void recycle(post.id)}>
               <RefreshCw size={12} className="mr-1" /> Recycle
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setOpenComments(openComments === post.id ? null : post.id)}
+            >
+              <MessageSquare size={12} className="mr-1" /> Discussion
+            </Button>
           </div>
+
+          {openComments === post.id && <PostComments postId={post.id} />}
         </Card>
       ))}
     </div>

@@ -170,6 +170,22 @@ export const adsContentSnippets = pgTable(
   (table) => [index('ads_content_snippets_created_idx').on(table.createdAt)],
 );
 
+// ── Collaboration: internal team comments on a post (staff-only, never published). ──
+export const adsPostComments = pgTable(
+  'ads_post_comments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => adsPosts.id, { onDelete: 'cascade' }),
+    authorEmail: varchar('author_email', { length: 255 }).notNull(),
+    authorName: varchar('author_name', { length: 120 }),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [index('ads_post_comments_post_idx').on(table.postId, table.createdAt)],
+);
+
 // ── Brand kit: single-row brand voice / colours / logo / default hashtags / boilerplate. ──
 export const adsBrandKit = pgTable('ads_brand_kit', {
   id: integer('id').primaryKey().default(1),
