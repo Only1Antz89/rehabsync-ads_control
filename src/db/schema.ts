@@ -468,6 +468,21 @@ export const adsListeningMentions = pgTable(
   ],
 );
 
+// ── Competitor tracking / share-of-voice: brand term-sets matched against listening mentions. ──
+export const adsCompetitors = pgTable(
+  'ads_competitors',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 160 }).notNull(),
+    terms: jsonb('terms').$type<string[]>().default([]).notNull(),
+    isOwn: boolean('is_own').notNull().default(false),
+    createdBy: varchar('created_by', { length: 255 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [index('ads_competitors_own_idx').on(table.isOwn)],
+);
+
 // ── Cron controller: per-job enable switch + last-run telemetry (managed in /admin/automation) ──
 export const adsCronJobs = pgTable('ads_cron_jobs', {
   key: varchar('key', { length: 40 }).primaryKey(),

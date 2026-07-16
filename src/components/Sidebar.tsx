@@ -13,6 +13,7 @@ import {
   Inbox,
   MessageSquare,
   Radar,
+  PieChart,
   BarChart3,
   Mail,
   Users,
@@ -39,6 +40,7 @@ const ICONS = {
   inbox: Inbox,
   inboxInsights: MessageSquare,
   listening: Radar,
+  shareOfVoice: PieChart,
   analytics: BarChart3,
   newsletters: Mail,
   subscribers: Users,
@@ -80,6 +82,7 @@ function buildNav(isAdmin: boolean): NavGroup[] {
       items: [
         { label: 'Inbox', href: '/inbox', icon: 'inbox' },
         { label: 'Listening', href: '/listening', icon: 'listening' },
+        { label: 'Share of voice', href: '/listening/share-of-voice', icon: 'shareOfVoice' },
         { label: 'Inbox insights', href: '/inbox/analytics', icon: 'inboxInsights' },
       ],
     },
