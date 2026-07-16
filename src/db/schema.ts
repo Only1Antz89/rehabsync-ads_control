@@ -550,6 +550,33 @@ export const canvaExports = pgTable(
   ],
 );
 
+/**
+ * A publish run of a Canva design. `status` mirrors the linked post's rollup (publishing → published
+ * | partial | failed); `move_status` tracks the Ready → Published folder move that only runs on a
+ * fully-published post (pending | moved | failed | not_needed | skipped).
+ */
+export const canvaPublishJobs = pgTable(
+  'canva_publish_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    canvaContentItemId: uuid('canva_content_item_id').references(() => canvaContentItems.id, { onDelete: 'set null' }),
+    canvaDesignId: varchar('canva_design_id', { length: 200 }).notNull(),
+    postId: uuid('post_id').references(() => adsPosts.id, { onDelete: 'set null' }),
+    status: varchar('status', { length: 16 }).notNull().default('publishing'),
+    moveStatus: varchar('move_status', { length: 16 }).notNull().default('pending'),
+    moveError: text('move_error'),
+    requestedBy: varchar('requested_by', { length: 255 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    completedAt: timestamp('completed_at'),
+  },
+  (table) => [
+    index('canva_publish_jobs_design_idx').on(table.canvaDesignId),
+    index('canva_publish_jobs_post_idx').on(table.postId),
+    index('canva_publish_jobs_status_idx').on(table.status, table.moveStatus),
+  ],
+);
+
 // ── Competitor tracking / share-of-voice: brand term-sets matched against listening mentions. ──
 export const adsCompetitors = pgTable(
   'ads_competitors',
