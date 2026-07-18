@@ -2,12 +2,21 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Eye, ImageOff } from 'lucide-react';
 import { Badge, Button, Card, Input } from '@/components/ui';
 import { PLATFORM_RULES, validateForPlatform } from '@/lib/social/validate';
 import type { SocialPlatform } from '@/db/schema';
 import { PreviewPanel } from './PreviewPanel';
 import type { PreviewTarget } from './PreviewPanel';
+import { FormatPreviewModal } from './FormatPreviewModal';
+
+interface CanvaDesign {
+  id: string;
+  title: string;
+  thumbnailUrl: string | null;
+  stage: string;
+  stages: string[];
+}
 
 /** Sign with our API, then PUT the file straight to Supabase Storage; returns the public URL. */
 async function uploadMedia(file: File): Promise<string> {
@@ -60,6 +69,13 @@ export function Composer({ editId = null, initialImage = null }: { editId?: stri
   const [videoUrl, setVideoUrl] = useState('');
   const [library, setLibrary] = useState<MediaAsset[]>([]);
   const [libPicker, setLibPicker] = useState<null | 'image' | 'video'>(null);
+  // Canva design picker (pull a synced design straight into this post)
+  const [canvaOpen, setCanvaOpen] = useState(false);
+  const [canvaDesigns, setCanvaDesigns] = useState<CanvaDesign[] | null>(null);
+  const [canvaError, setCanvaError] = useState<string | null>(null);
+  const [preparingId, setPreparingId] = useState<string | null>(null);
+  // Per-format preview modal
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [manual, setManual] = useState<Set<SocialPlatform>>(new Set());
@@ -97,6 +113,48 @@ export function Composer({ editId = null, initialImage = null }: { editId?: stri
   function addImage(url: string) {
     const u = url.trim();
     if (u) setImages((prev) => (prev.includes(u) ? prev : [...prev, u]));
+  }
+
+  function toggleCanvaPicker() {
+    const next = !canvaOpen;
+    setCanvaOpen(next);
+    setLibPicker(null);
+    if (next && canvaDesigns === null) void loadCanvaDesigns();
+  }
+
+  async function loadCanvaDesigns() {
+    setCanvaError(null);
+    try {
+      const res = await fetch('/api/integrations/canva/content');
+      if (!res.ok) {
+        setCanvaError(res.status === 401 ? 'Sign in again to browse Canva designs.' : 'Could not load Canva designs.');
+        setCanvaDesigns([]);
+        return;
+      }
+      const d = (await res.json()) as { items: CanvaDesign[] };
+      setCanvaDesigns(d.items);
+    } catch {
+      setCanvaError('Could not load Canva designs.');
+      setCanvaDesigns([]);
+    }
+  }
+
+  /** Render a synced Canva design to an image and add it to this post. */
+  async function prepareCanvaDesign(design: CanvaDesign) {
+    setPreparingId(design.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/integrations/canva/content/${design.id}/prepare`, { method: 'POST' });
+      const d = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+      if (!res.ok || !d?.url) {
+        setError(d?.error ?? 'Could not prepare this design — check the Canva connection and try again.');
+        return;
+      }
+      addImage(d.url);
+      setCanvaOpen(false);
+    } finally {
+      setPreparingId(null);
+    }
   }
 
   async function onPickFile(kind: 'image' | 'video', e: React.ChangeEvent<HTMLInputElement>) {
@@ -212,6 +270,16 @@ export function Composer({ editId = null, initialImage = null }: { editId?: stri
     const platforms = new Set<SocialPlatform>(previewTargets.map((t) => t.platform));
     return [...platforms].flatMap((p) => validateForPlatform(draft, p));
   }, [previewTargets, draft]);
+
+  // Per-network caption for the format preview: use a target's override for that platform if set.
+  const captionByPlatform = useMemo(() => {
+    const map: Partial<Record<SocialPlatform, string>> = {};
+    for (const t of previewTargets) {
+      const override = overrides[t.key]?.trim();
+      if (override && !map[t.platform]) map[t.platform] = override;
+    }
+    return map;
+  }, [previewTargets, overrides]);
 
   function toggle<T>(set: Set<T>, value: T, update: (next: Set<T>) => void) {
     const next = new Set(set);
@@ -418,7 +486,8 @@ export function Composer({ editId = null, initialImage = null }: { editId?: stri
               <div className="flex gap-1.5">
                 <input ref={imageFileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => void onPickFile('image', e)} />
                 <Button type="button" size="sm" variant="secondary" loading={uploading === 'image'} onClick={() => imageFileRef.current?.click()}>Upload</Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setLibPicker(libPicker === 'image' ? null : 'image')}>Library</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => { setLibPicker(libPicker === 'image' ? null : 'image'); setCanvaOpen(false); }}>Library</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={toggleCanvaPicker}>Canva</Button>
               </div>
             </div>
             {images.length > 0 && (
@@ -440,6 +509,55 @@ export function Composer({ editId = null, initialImage = null }: { editId?: stri
               <Button type="button" size="sm" variant="secondary" onClick={() => { addImage(manualImage); setManualImage(''); }}>Add</Button>
             </div>
           </div>
+
+          {/* Canva design picker — pull a synced design straight into this post */}
+          {canvaOpen && (
+            <div className="rounded-lg border p-2" style={{ borderColor: 'var(--border-primary)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Canva designs</span>
+                <button type="button" onClick={() => setCanvaOpen(false)} className="text-xs" style={{ color: 'var(--text-muted)' }}>close</button>
+              </div>
+              {canvaError && <p className="text-xs mb-2" style={{ color: 'var(--color-error-text)' }}>{canvaError}</p>}
+              {canvaDesigns === null ? (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading designs…</p>
+              ) : canvaDesigns.length === 0 ? (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  No designs synced yet. Sync your Canva folders on the{' '}
+                  <a href="/canva" className="underline" style={{ color: 'var(--brand-primary)' }}>Canva designs</a> page, then try again.
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
+                  {canvaDesigns.map((design) => (
+                    <button
+                      key={design.id}
+                      type="button"
+                      onClick={() => void prepareCanvaDesign(design)}
+                      disabled={preparingId !== null}
+                      title={design.title}
+                      className="relative rounded-lg border overflow-hidden text-left disabled:opacity-60"
+                      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+                    >
+                      <div className="aspect-square flex items-center justify-center overflow-hidden">
+                        {design.thumbnailUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={design.thumbnailUrl} alt={design.title} className="h-full w-full object-cover" />
+                        ) : (
+                          <ImageOff size={18} color="#64748b" />
+                        )}
+                      </div>
+                      <span className="block px-1.5 py-1 text-[10px] truncate" style={{ color: 'var(--text-secondary)' }}>{design.title}</span>
+                      {preparingId === design.id && (
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-medium" style={{ backgroundColor: 'rgba(15,23,42,0.6)', color: '#fff' }}>Preparing…</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
+                Selecting a design renders it to an image and adds it to this post.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-end gap-2">
             <div className="flex-1">
@@ -488,6 +606,15 @@ export function Composer({ editId = null, initialImage = null }: { editId?: stri
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Clinic tour: the new studio"
           />
+
+          <div className="pt-1">
+            <Button type="button" variant="secondary" onClick={() => setPreviewOpen(true)}>
+              <Eye size={15} className="mr-1.5" /> Preview per format
+            </Button>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              See how this post is cropped and captioned on Instagram, Facebook, X, LinkedIn, TikTok and YouTube.
+            </p>
+          </div>
         </div>
       </Card>
 
@@ -626,6 +753,13 @@ export function Composer({ editId = null, initialImage = null }: { editId?: stri
           </div>
         </Card>
       </div>
+
+      <FormatPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        draft={{ body, images, videoUrl: videoUrl || null, title: title || null, linkUrl: linkUrl || null }}
+        captions={captionByPlatform}
+      />
     </div>
   );
 }
