@@ -1,4 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "tsx scripts/deploy-migrate.ts && next build"
+  "buildCommand": "tsx scripts/deploy-migrate.ts --soft && next build"
 }
