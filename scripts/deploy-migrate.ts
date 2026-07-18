@@ -16,23 +16,52 @@ import postgres from 'postgres';
 const MIGRATIONS_DIR = join(__dirname, '..', 'drizzle');
 const TRACKING_TABLE = '_ads_applied_migrations';
 
-function makeClient() {
-  const connectionString = process.env['REHABSYNC_DATABASE_URL'];
-  if (!connectionString) {
-    console.error('[deploy-migrate] REHABSYNC_DATABASE_URL is not set');
-    process.exit(1);
+/** Same resolution/fallback order as the app runtime (src/db/index.ts). */
+function resolveDatabaseUrl(): string | undefined {
+  return (
+    process.env['REHABSYNC_DATABASE_URL'] ||
+    process.env['DATABASE_URL'] ||
+    process.env['POSTGRES_URL'] ||
+    process.env['POSTGRES_PRISMA_URL'] ||
+    process.env['POSTGRES_URL_NON_POOLING'] ||
+    undefined
+  );
+}
+
+/**
+ * Host-based SSL, matching the app runtime. Managed Postgres (Supabase) refuses non-SSL
+ * connections, so gate on the host rather than REHABSYNC_NODE_ENV — otherwise migrations run at
+ * build time (where NODE_ENV may not be "production") would fail to connect.
+ */
+function sslOption(url: string): boolean | { rejectUnauthorized: boolean } {
+  try {
+    const host = new URL(url).hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
+  } catch {
+    // Unparseable URL — assume remote and require TLS.
   }
-  const rejectUnauthorized = process.env['REHABSYNC_DATABASE_SSL_REJECT_UNAUTHORIZED'] === 'true';
+  return { rejectUnauthorized: process.env['REHABSYNC_DATABASE_SSL_REJECT_UNAUTHORIZED'] === 'true' };
+}
+
+function makeClient(connectionString: string) {
   return postgres(connectionString, {
     max: 1,
     prepare: false,
     connect_timeout: 15,
-    ssl: process.env['REHABSYNC_NODE_ENV'] === 'production' ? { rejectUnauthorized } : false,
+    ssl: sslOption(connectionString),
   });
 }
 
 async function main(): Promise<void> {
-  const sql = makeClient();
+  const connectionString = resolveDatabaseUrl();
+  if (!connectionString) {
+    // No DB configured (e.g. a build before the database env var is set). Skip rather than fail the
+    // build — the app surfaces a clear runtime error until the URL is configured.
+    console.warn('[deploy-migrate] no database URL configured — skipping migrations.');
+    return;
+  }
+
+  const sql = makeClient(connectionString);
   try {
     await sql.unsafe(
       `CREATE TABLE IF NOT EXISTS "${TRACKING_TABLE}" (

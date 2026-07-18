@@ -29,13 +29,33 @@ function sslOption(url: string): boolean | { rejectUnauthorized: boolean } {
   return { rejectUnauthorized: process.env['REHABSYNC_DATABASE_SSL_REJECT_UNAUTHORIZED'] === 'true' };
 }
 
+/**
+ * Resolve the Postgres connection string. `REHABSYNC_DATABASE_URL` is the platform convention, but
+ * we fall back to the names Supabase's Vercel integration provisions so that linking the database
+ * through that integration is sufficient — no separate REHABSYNC_DATABASE_URL needed. Without this,
+ * a project that only has the integration's vars threw "REHABSYNC_DATABASE_URL is not set" on every
+ * DB-backed route (an opaque 500).
+ */
+export function resolveDatabaseUrl(): string | undefined {
+  return (
+    process.env['REHABSYNC_DATABASE_URL'] ||
+    process.env['DATABASE_URL'] ||
+    process.env['POSTGRES_URL'] ||
+    process.env['POSTGRES_PRISMA_URL'] ||
+    process.env['POSTGRES_URL_NON_POOLING'] ||
+    undefined
+  );
+}
+
 export function getDb(): Db {
   if (globalStore.__adsDb) return globalStore.__adsDb;
   if (db) return db;
 
-  const url = process.env['REHABSYNC_DATABASE_URL'];
+  const url = resolveDatabaseUrl();
   if (!url) {
-    throw new Error('REHABSYNC_DATABASE_URL is not set');
+    throw new Error(
+      'No database URL configured — set REHABSYNC_DATABASE_URL (or link the database via the Supabase/Vercel integration, which provides DATABASE_URL / POSTGRES_URL).',
+    );
   }
 
   client = postgres(url, {
