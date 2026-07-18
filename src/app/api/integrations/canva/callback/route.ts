@@ -44,7 +44,15 @@ export async function GET(req: Request) {
   const tokens = await exchangeCode(code, verifier, origin);
   if ('error' in tokens) return back(req, 'error=exchange_failed');
 
-  await saveConnection(tokens, session.email);
-  await recordAudit(session, 'canva_connected', 'canva_connection', null, {});
+  // Never strand the user on a raw 500 mid-OAuth: if persisting the connection fails (e.g. the
+  // database or REHABSYNC_ENCRYPTION_KEY isn't configured), redirect back to the settings screen
+  // with an error the page can show.
+  try {
+    await saveConnection(tokens, session.email);
+    await recordAudit(session, 'canva_connected', 'canva_connection', null, {});
+  } catch (err) {
+    console.error('[canva/callback] failed to save connection:', (err as Error).message);
+    return back(req, 'error=save_failed');
+  }
   return back(req, 'connected=1');
 }
